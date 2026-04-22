@@ -1,0 +1,5 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Rimuovi tutto il resto per ora per evitare conflitti */
