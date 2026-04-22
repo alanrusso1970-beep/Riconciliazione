@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Printer, Search, Lock, FilePlus } from 'lucide-react';
+import { Save, Printer, Search, Lock, FilePlus, History, X } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // --- TIPI E INTERFACCE ---
 type FuelType = 'spb' | 'gasolio' | 'supreme' | 'gpl';
@@ -99,15 +101,22 @@ export default function App() {
   const [hasLoadedData, setHasLoadedData] = useState(false);
   const [passInput, setPassInput] = useState('');
   const [showError, setShowError] = useState(false);
+  
+  // Modal History
+  const [showHistory, setShowHistory] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [historyData, setHistoryData] = useState<any[]>([]);
 
   // --- LOGICA DI AUTENTICAZIONE ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (passInput === 'toil') {
       setIsLogged(true);
+      toast.success('Accesso effettuato con successo!');
     } else {
       setShowError(true);
       setPassInput('');
+      toast.error('Codice errato!');
       setTimeout(() => setShowError(false), 3000);
     }
   };
@@ -118,6 +127,18 @@ export default function App() {
   useEffect(() => {
     // Non facciamo nulla al mount
   }, []);
+
+  // --- HELPER DIFFERENZA ---
+  const getFuelDiff = (f: FuelType, currentState: AppState) => {
+    const fl = currentState.fuels[f];
+    const calc = currentState.calcoli[f];
+    const erogato = fl.dispensers.reduce((sum, disp) => sum + Math.max(0, disp.chiusura - disp.apertura), 0);
+    const giacEffettiva = fl.cisterne.reduce((s, c) => s + c.giacenza, 0);
+    const totCarico = calc.rimananzeIniziali + calc.carico + calc.eccedRegistrate + calc.scattiVuoto + calc.eccedenzeTrasporto;
+    const totScarico = erogato + calc.caliGiaRegistrati + calc.caliViaggio + calc.caliTecnici;
+    const giacContabile = totCarico - totScarico;
+    return Math.round(giacEffettiva - giacContabile);
+  };
 
   // --- AZIONI ---
   const loadStation = async () => {
@@ -145,16 +166,23 @@ export default function App() {
           calcoli: json.savedData?.calcoli || INITIAL_STATE.calcoli
         });
         setHasLoadedData(true);
+        toast.success('Dati impianto caricati correttamente!');
+
+        // Carica lo storico
+        const hKey = `history_${pbl}`;
+        setHistoryData(JSON.parse(localStorage.getItem(hKey) || '[]'));
+        
       } else {
-        alert('⚠️ Impianto non trovato.');
+        toast.error('Impianto non trovato.');
       }
     } catch (err) {
-      alert('❌ Errore connessione al server.');
+      toast.error('Errore di connessione al server.');
     } finally { setLoading(false); }
   };
 
   const handleSave = async () => {
     setSaving(true);
+    const toastId = toast.loading('Salvataggio in corso...');
     try {
       const baseUrl = window.location.origin;
       const res = await fetch(`${baseUrl}/api/save`, {
@@ -164,11 +192,30 @@ export default function App() {
       });
       const json = await res.json();
       if (json.success) {
-        alert('✅ Salvato con successo!');
+        toast.success('Salvato con successo!', { id: toastId });
+        
+        // --- SALVATAGGIO STORICO LOCALE ---
+        const historyKey = `history_${pbl}`;
+        const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
+        const newEntry = {
+          date: data.station.data,
+          spb: getFuelDiff('spb', data),
+          gasolio: getFuelDiff('gasolio', data),
+          supreme: getFuelDiff('supreme', data),
+          gpl: getFuelDiff('gpl', data),
+          timestamp: new Date().getTime()
+        };
+        // Tieni solo gli ultimi 30 giorni per evitare che esploda il localstorage
+        const updatedHistory = [...existingHistory, newEntry].slice(-30);
+        localStorage.setItem(historyKey, JSON.stringify(updatedHistory));
+        setHistoryData(updatedHistory);
+
         window.print();
+      } else {
+        toast.error('Errore restituito dal server.', { id: toastId });
       }
     } catch {
-      alert('❌ Errore nel salvataggio.');
+      toast.error('Impossibile completare il salvataggio.', { id: toastId });
     } finally { setSaving(false); }
   };
 
@@ -195,6 +242,7 @@ export default function App() {
         fuels: newFuels
       };
     });
+    toast.success('Nuovo turno! Chiusure e Cisterne azzerate, Data aggiornata.');
   };
 
   // --- UPDATE HANDLERS ---
@@ -423,10 +471,11 @@ export default function App() {
   };
 
   // --- LOGICA DI ACCESSO E ERRORI ---
-  if (showError) return <div className="min-h-screen flex items-center justify-center text-[200px]">🖕🏼</div>;
+  if (showError) return <div className="min-h-screen flex items-center justify-center text-[200px] animate-pulse">🖕🏼</div>;
   if (!isLogged) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col md:flex-row font-sans selection:bg-blue-500 selection:text-white">
+        <Toaster position="top-center" reverseOrder={false} />
         <div className="hidden md:flex md:w-1/2 bg-slate-800 p-12 flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 right-0 p-32 bg-blue-600 rounded-full blur-[100px] opacity-20 -mr-20 -mt-20 animate-float"></div>
           <div className="absolute bottom-0 left-0 p-32 bg-emerald-600 rounded-full blur-[100px] opacity-20 -ml-20 -mb-20 animate-float" style={{ animationDelay: '2s' }}></div>
@@ -484,6 +533,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 print:p-0 print:bg-white font-sans text-slate-900 leading-relaxed">
       <style>{`.hidden-screen { display: none; } ${PRINT_STYLES}`}</style>
+      <Toaster position="top-center" reverseOrder={false} toastOptions={{ className: 'no-print' }} />
 
       {/* MODALE DI CARICAMENTO */}
       {loading && (
@@ -503,6 +553,47 @@ export default function App() {
         </div>
       )}
 
+      {/* MODALE STORICO */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 no-print">
+          <div className="bg-white rounded-[2rem] p-8 shadow-2xl w-full max-w-4xl flex flex-col gap-6 relative animate-fade-in-up">
+            <button onClick={() => setShowHistory(false)} className="absolute top-6 right-6 p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors">
+              <X size={24} className="text-slate-600" />
+            </button>
+            
+            <div>
+              <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+                <History className="text-indigo-600" size={28} />
+                Storico Riconciliazioni
+              </h2>
+              <p className="text-slate-500 text-sm mt-1">Andamento delle eccedenze (+) e cali (-) degli ultimi salvataggi su questo dispositivo.</p>
+            </div>
+
+            {historyData.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 font-medium bg-slate-50 rounded-2xl border border-slate-100">
+                Nessun dato storico salvato su questo dispositivo per l'impianto {pbl}. Effettua un salvataggio per iniziare a tracciare.
+              </div>
+            ) : (
+              <div className="h-80 w-full bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={historyData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="date" tick={{fontSize: 10, fill: '#64748b'}} />
+                    <YAxis tick={{fontSize: 10, fill: '#64748b'}} />
+                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                    <Line type="monotone" name="Benzina" dataKey="spb" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                    <Line type="monotone" name="Gasolio" dataKey="gasolio" stroke="#f59e0b" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                    <Line type="monotone" name="Supreme" dataKey="supreme" stroke="#e11d48" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                    <Line type="monotone" name="GPL" dataKey="gpl" stroke="#06b6d4" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* HEADER & CONTROLLI */}
       <div className="max-w-7xl mx-auto space-y-5">
         <div className="bg-slate-800 text-white p-4 rounded-2xl flex justify-between items-center no-print shadow-[0_8px_30px_rgb(0,0,0,0.12)] animate-fade-in-up">
@@ -512,7 +603,12 @@ export default function App() {
           </h1>
           <div className="flex gap-3">
             {hasLoadedData && (
-              <button onClick={handleNew} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg shadow-emerald-600/30 hover:shadow-emerald-600/50 hover:-translate-y-0.5 active:scale-95"><FilePlus size={18}/> NUOVO</button>
+              <>
+                <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:-translate-y-0.5 active:scale-95 text-white">
+                  <History size={18}/> STORICO
+                </button>
+                <button onClick={handleNew} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg shadow-emerald-600/30 hover:shadow-emerald-600/50 hover:-translate-y-0.5 active:scale-95"><FilePlus size={18}/> NUOVO</button>
+              </>
             )}
             <button onClick={() => window.print()} className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-xl font-bold text-sm transition-all hover:shadow-lg active:scale-95"><Printer size={18}/> STAMPA</button>
             <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-600/30 hover:shadow-blue-600/50 hover:-translate-y-0.5 active:scale-95"><Save size={18}/> {saving ? 'SALVATAGGIO...' : 'SALVA'}</button>
