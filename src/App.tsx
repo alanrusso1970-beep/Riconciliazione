@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Printer, Search, Lock } from 'lucide-react';
+import { Save, Printer, Search, Lock, FilePlus } from 'lucide-react';
 
 // --- TIPI E INTERFACCE ---
 type FuelType = 'spb' | 'gasolio' | 'supreme' | 'gpl';
@@ -51,9 +51,21 @@ const PRINT_STYLES = `
     50% { transform: translateX(0); }
     100% { transform: translateX(100%); }
   }
-  .animate-loading-bar {
-    animation: loadingBar 1.5s infinite linear;
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  .animate-loading-bar { animation: loadingBar 1.5s infinite linear; }
+  .animate-fade-in-up { animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
 `;
 
 const createEmptyDispensers = () => Array(12).fill({ apertura: 0, chiusura: 0 });
@@ -84,6 +96,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
+  const [hasLoadedData, setHasLoadedData] = useState(false);
   const [passInput, setPassInput] = useState('');
   const [showError, setShowError] = useState(false);
 
@@ -100,14 +113,10 @@ export default function App() {
   };
 
   // --- EFFETTI ---
+  // L'aggiornamento automatico dell'ora è stato rimosso per permettere
+  // di caricare l'ora salvata e per non sovrascrivere eventuali modifiche manuali.
   useEffect(() => {
-    const timer = setInterval(() => {
-      setData(prev => ({ 
-        ...prev, 
-        station: { ...prev.station, ora: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) } 
-      }));
-    }, 60000);
-    return () => clearInterval(timer);
+    // Non facciamo nulla al mount
   }, []);
 
   // --- AZIONI ---
@@ -127,14 +136,15 @@ export default function App() {
           comune: json.station.comune || json.station.citta || '',
           prov: json.station.prov || json.station.provincia || '',
           codCliente: pbl,
-          data: data.station.data,
-          ora: data.station.ora,
+          data: json.station.data || json.savedData?.station?.data || data.station.data,
+          ora: json.station.ora || json.savedData?.station?.ora || data.station.ora,
         };
         setData({
           station: mapped,
           fuels: json.savedData?.fuels || INITIAL_STATE.fuels,
           calcoli: json.savedData?.calcoli || INITIAL_STATE.calcoli
         });
+        setHasLoadedData(true);
       } else {
         alert('⚠️ Impianto non trovato.');
       }
@@ -160,6 +170,31 @@ export default function App() {
     } catch {
       alert('❌ Errore nel salvataggio.');
     } finally { setSaving(false); }
+  };
+
+  const handleNew = () => {
+    setData(prev => {
+      const newFuels = { ...prev.fuels };
+      const fuelsList: FuelType[] = ['spb', 'gasolio', 'supreme', 'gpl'];
+      
+      fuelsList.forEach(f => {
+        newFuels[f] = {
+          ...newFuels[f],
+          dispensers: newFuels[f].dispensers.map(d => ({ ...d, chiusura: 0 })),
+          cisterne: newFuels[f].cisterne.map(c => ({ altezza: 0, giacenza: 0 }))
+        };
+      });
+
+      return {
+        ...prev,
+        station: {
+          ...prev.station,
+          data: new Date().toISOString().split('T')[0],
+          ora: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+        },
+        fuels: newFuels
+      };
+    });
   };
 
   // --- UPDATE HANDLERS ---
@@ -222,15 +257,25 @@ export default function App() {
     ];
   };
 
+  const shouldHideInPrint = (f: FuelType) => {
+    if (f === 'spb' || f === 'gasolio') return false; // Non nascondere mai questi due
+    const d = data.fuels[f].dispensers;
+    const c = data.fuels[f].cisterne;
+    const hasDispenserData = d.some(x => x.apertura > 0 || x.chiusura > 0);
+    const hasCisternaData = c.some(x => x.altezza > 0 || x.giacenza > 0);
+    return !hasDispenserData && !hasCisternaData;
+  };
+
   // --- RENDER HELPERS ---
   const renderTotalizzatori = (f: FuelType) => {
     const config = FUEL_CONFIG[f];
     const d = data.fuels[f].dispensers;
     const totals = d.map(x => Math.max(0, x.chiusura - x.apertura));
     const grandTotal = totals.reduce((a, b) => a + b, 0);
+    const hidePrint = shouldHideInPrint(f) ? 'print:hidden' : '';
 
     return (
-      <div className="mb-4 break-inside-avoid">
+      <div className={`mb-4 break-inside-avoid ${hidePrint}`}>
         <h3 className={`font-bold text-xs mb-1 px-2 py-1 rounded-t-md ${config.header} ${config.text} uppercase flex items-center gap-2`}>
           <div className={`w-2 h-2 rounded-full ${config.icon}`} />
           {config.label}
@@ -238,7 +283,7 @@ export default function App() {
         <table className="w-full text-[10px] border-collapse border border-gray-300">
           <thead>
             <tr className="bg-gray-100">
-              <th className="border p-1 w-16 text-left">Voce</th>
+              <th className="border p-1 w-16 text-left">Erogatore</th>
               {Array.from({ length: 12 }).map((_, i) => <th key={i} className="border p-0.5 text-center">{i + 1}</th>)}
               <th className="border p-1 bg-gray-200 text-right w-24">TOTALE</th>
             </tr>
@@ -280,8 +325,10 @@ export default function App() {
   const renderCisterne = (f: FuelType) => {
     const config = FUEL_CONFIG[f];
     const cisterne = data.fuels[f].cisterne;
+    const hidePrint = shouldHideInPrint(f) ? 'print:hidden' : '';
+    
     return (
-      <div className="mb-2 break-inside-avoid">
+      <div className={`mb-2 break-inside-avoid ${hidePrint}`}>
         <h3 className={`font-bold text-[10px] mb-1 px-2 py-1 rounded-t-md ${config.header} ${config.text} uppercase flex items-center gap-2`}>
           <div className={`w-1.5 h-1.5 rounded-full ${config.icon}`} />
           {config.label}
@@ -334,8 +381,8 @@ export default function App() {
               <th className="border p-1.5 text-left w-48">Descrizione Movimento</th>
               <th className="border p-1.5 text-center bg-emerald-900/40">Benzina (Spb)</th>
               <th className="border p-1.5 text-center bg-amber-900/40">Gasolio</th>
-              <th className="border p-1.5 text-center bg-rose-900/40">Supreme</th>
-              <th className="border p-1.5 text-center bg-cyan-900/40">GPL</th>
+              <th className={`border p-1.5 text-center bg-rose-900/40 ${shouldHideInPrint('supreme') ? 'print:hidden' : ''}`}>Supreme</th>
+              <th className={`border p-1.5 text-center bg-cyan-900/40 ${shouldHideInPrint('gpl') ? 'print:hidden' : ''}`}>GPL</th>
             </tr>
           </thead>
           <tbody>
@@ -352,7 +399,7 @@ export default function App() {
                   }
 
                   return (
-                    <td key={idx} className={`border px-1.5 py-1 text-right ${cell.red ? 'text-red-600' : ''}`}>
+                    <td key={idx} className={`border px-1.5 py-1 text-right ${cell.red ? 'text-red-600' : ''} ${shouldHideInPrint(fuels[idx]) ? 'print:hidden' : ''}`}>
                       <div className="flex justify-end items-center gap-1">
                         {cell.k && (
                           <input type="number" 
@@ -379,18 +426,18 @@ export default function App() {
   if (showError) return <div className="min-h-screen flex items-center justify-center text-[200px]">🖕🏼</div>;
   if (!isLogged) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col md:flex-row font-sans">
+      <div className="min-h-screen bg-slate-900 flex flex-col md:flex-row font-sans selection:bg-blue-500 selection:text-white">
         <div className="hidden md:flex md:w-1/2 bg-slate-800 p-12 flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-32 bg-blue-600 rounded-full blur-[100px] opacity-20 -mr-20 -mt-20"></div>
-          <div className="absolute bottom-0 left-0 p-32 bg-emerald-600 rounded-full blur-[100px] opacity-20 -ml-20 -mb-20"></div>
+          <div className="absolute top-0 right-0 p-32 bg-blue-600 rounded-full blur-[100px] opacity-20 -mr-20 -mt-20 animate-float"></div>
+          <div className="absolute bottom-0 left-0 p-32 bg-emerald-600 rounded-full blur-[100px] opacity-20 -ml-20 -mb-20 animate-float" style={{ animationDelay: '2s' }}></div>
           
-          <div className="relative z-10 flex flex-col gap-6">
-            <div className="bg-white/10 w-fit p-4 rounded-2xl backdrop-blur-sm border border-white/10">
+          <div className="relative z-10 flex flex-col gap-6 animate-fade-in-up">
+            <div className="bg-white/10 w-fit p-4 rounded-2xl backdrop-blur-sm border border-white/10 shadow-xl">
               <Lock className="text-white w-8 h-8" />
             </div>
             <div>
               <h1 className="text-5xl font-black text-white tracking-tight leading-tight">
-                Riconciliazione <br/><span className="text-blue-400">Carburanti</span>
+                Riconciliazione <br/><span className="text-blue-400 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">Carburanti</span>
               </h1>
               <p className="mt-6 text-slate-300 text-lg leading-relaxed max-w-md">
                 Piattaforma avanzata per la gestione contabile, rilevazione giacenze e quadratura fiscale per gli impianti di distribuzione carburanti.
@@ -398,15 +445,15 @@ export default function App() {
             </div>
           </div>
           
-          <div className="relative z-10 text-slate-500 text-sm font-medium">
+          <div className="relative z-10 text-slate-500 text-sm font-medium animate-fade-in-up delay-200">
             © {new Date().getFullYear()} - Accesso Limitato al Personale Autorizzato.
           </div>
         </div>
         
         <div className="w-full md:w-1/2 flex items-center justify-center p-8 bg-slate-50 relative">
-          <form onSubmit={handleLogin} className="w-full max-w-sm flex flex-col gap-6 bg-white p-10 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
+          <form onSubmit={handleLogin} className="w-full max-w-sm flex flex-col gap-6 bg-white p-10 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-slate-100 animate-fade-in-up delay-100 hover:shadow-[0_20px_40px_rgb(0,0,0,0.12)] transition-shadow duration-500">
             <div className="md:hidden text-center mb-6">
-              <div className="bg-slate-900 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <div className="bg-slate-900 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-slate-900/20">
                 <Lock className="text-white w-6 h-6" />
               </div>
               <h1 className="text-2xl font-black text-slate-800">Riconciliazione</h1>
@@ -416,15 +463,16 @@ export default function App() {
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Codice di Accesso</label>
               <input 
                 type="password" 
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center tracking-[0.5em] font-mono text-2xl outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-slate-700" 
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center tracking-[0.5em] font-mono text-2xl outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-slate-700 hover:bg-slate-100" 
                 value={passInput} 
                 onChange={e => setPassInput(e.target.value)} 
                 autoFocus 
                 placeholder="••••"
               />
             </div>
-            <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20 active:scale-95 text-sm uppercase tracking-wider mt-2">
-              Accedi al Sistema
+            <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 transition-all duration-300 shadow-lg shadow-slate-900/20 hover:shadow-xl hover:shadow-slate-900/30 hover:-translate-y-0.5 active:scale-95 text-sm uppercase tracking-wider mt-2 group relative overflow-hidden">
+              <span className="relative z-10">Accedi al Sistema</span>
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
             </button>
           </form>
         </div>
@@ -456,20 +504,23 @@ export default function App() {
       )}
 
       {/* HEADER & CONTROLLI */}
-      <div className="max-w-7xl mx-auto space-y-4">
-        <div className="bg-slate-800 text-white p-4 rounded-xl flex justify-between items-center no-print shadow-lg">
+      <div className="max-w-7xl mx-auto space-y-5">
+        <div className="bg-slate-800 text-white p-4 rounded-2xl flex justify-between items-center no-print shadow-[0_8px_30px_rgb(0,0,0,0.12)] animate-fade-in-up">
           <h1 className="font-bold uppercase tracking-tight flex items-center gap-3">
-            <div className="bg-white/20 p-1.5 rounded-md"><Printer size={16} /></div>
+            <div className="bg-white/20 p-1.5 rounded-lg shadow-inner"><Printer size={16} /></div>
             Registro Carburanti v2.0
           </h1>
           <div className="flex gap-3">
-            <button onClick={() => window.print()} className="flex items-center gap-2 bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded-lg font-bold text-sm transition-colors"><Printer size={18}/> STAMPA</button>
-            <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg font-bold text-sm transition-colors shadow-lg shadow-blue-600/30"><Save size={18}/> {saving ? 'SALVATAGGIO...' : 'SALVA'}</button>
+            {hasLoadedData && (
+              <button onClick={handleNew} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg shadow-emerald-600/30 hover:shadow-emerald-600/50 hover:-translate-y-0.5 active:scale-95"><FilePlus size={18}/> NUOVO</button>
+            )}
+            <button onClick={() => window.print()} className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-xl font-bold text-sm transition-all hover:shadow-lg active:scale-95"><Printer size={18}/> STAMPA</button>
+            <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-600/30 hover:shadow-blue-600/50 hover:-translate-y-0.5 active:scale-95"><Save size={18}/> {saving ? 'SALVATAGGIO...' : 'SALVA'}</button>
           </div>
         </div>
 
         {/* ANAGRAFICA */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 space-y-4 animate-fade-in-up delay-100">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="flex flex-col">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Codice Impianto</label>
@@ -515,9 +566,9 @@ export default function App() {
         </div>
 
         {/* TOTALIZZATORI */}
-        <div className="bg-white p-5 border border-slate-200 rounded-3xl shadow-sm page-break group transition-all hover:shadow-md">
-          <h2 className="text-[11px] font-black mb-5 text-slate-800 border-b border-slate-100 pb-2 uppercase tracking-[0.15em] flex items-center gap-2">
-            <div className="w-2 h-2 bg-slate-800 rounded-full" />
+        <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] page-break transition-all duration-500 hover:-translate-y-1 animate-fade-in-up delay-200">
+          <h2 className="text-[11px] font-black mb-6 text-slate-800 border-b border-slate-100 pb-3 uppercase tracking-[0.15em] flex items-center gap-3">
+            <div className="w-2.5 h-2.5 bg-slate-800 rounded-full shadow-sm animate-pulse" />
             1. Rilevazione Contatori Erogatori
           </h2>
           {renderTotalizzatori('spb')}
@@ -527,10 +578,10 @@ export default function App() {
         </div>
 
         {/* GIACENZE E CALCOLI */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white p-5 border border-slate-200 rounded-3xl shadow-sm transition-all hover:shadow-md">
-            <h2 className="text-[11px] font-black mb-5 text-slate-800 border-b border-slate-100 pb-2 uppercase tracking-[0.15em] flex items-center gap-2">
-              <div className="w-2 h-2 bg-slate-800 rounded-full" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in-up delay-300">
+          <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-500 hover:-translate-y-1">
+            <h2 className="text-[11px] font-black mb-6 text-slate-800 border-b border-slate-100 pb-3 uppercase tracking-[0.15em] flex items-center gap-3">
+              <div className="w-2.5 h-2.5 bg-slate-800 rounded-full shadow-sm animate-pulse" />
               2. Giacenze Fisiche (Cisterne)
             </h2>
             <div className="grid grid-cols-2 gap-5">
@@ -540,8 +591,8 @@ export default function App() {
               {renderCisterne('gpl')}
             </div>
           </div>
-          <div className="bg-white p-5 border border-slate-200 rounded-3xl shadow-sm w-full transition-all hover:shadow-md">
-            <h2 className="text-[11px] font-black mb-5 text-slate-800 border-b border-slate-100 pb-2 uppercase tracking-[0.15em] text-center">
+          <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] w-full transition-all duration-500 hover:-translate-y-1">
+            <h2 className="text-[11px] font-black mb-6 text-slate-800 border-b border-slate-100 pb-3 uppercase tracking-[0.15em] text-center bg-slate-50 rounded-xl p-2">
               3. Prospetto di Riconciliazione Movimenti e Cali
             </h2>
             {renderProspettoGenerale()}
