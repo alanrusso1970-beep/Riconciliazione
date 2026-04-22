@@ -8,7 +8,7 @@ Applicazione web per la gestione e riconciliazione delle giacenze di carburante 
 - ✅ Calcoli automatici in tempo reale (totalizzatori, cali, eccedenze)
 - ✅ Salvataggio su Google Sheets tramite proxy locale
 - ✅ Esportazione PDF ottimizzata per la stampa
-- ✅ Clock automatico e caricamento dati stazione via PBL
+- ✅ Clock automatico e caricamento dati stazione via PBL.
 
 ## 🛠️ Prerequisiti
 
