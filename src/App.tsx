@@ -94,7 +94,7 @@ const INITIAL_STATE: AppState = {
 
 export default function App() {
   const [data, setData] = useState<AppState>(INITIAL_STATE);
-  const [pbl, setPbl] = useState('108208');
+  const [pbl, setPbl] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
@@ -121,13 +121,6 @@ export default function App() {
     }
   };
 
-  // --- EFFETTI ---
-  // L'aggiornamento automatico dell'ora è stato rimosso per permettere
-  // di caricare l'ora salvata e per non sovrascrivere eventuali modifiche manuali.
-  useEffect(() => {
-    // Non facciamo nulla al mount
-  }, []);
-
   // --- HELPER DIFFERENZA ---
   const getFuelDiff = (f: FuelType, currentState: AppState) => {
     const fl = currentState.fuels[f];
@@ -140,86 +133,116 @@ export default function App() {
     return Math.round(giacEffettiva - giacContabile);
   };
 
-  // --- AZIONI ---
+  // --- CARICAMENTO DATI IMPIANTO (SENZA BACKEND) ---
   const loadStation = async () => {
-    if (!pbl) return;
+    if (!pbl.trim()) {
+      toast.error('Inserisci un codice impianto');
+      return;
+    }
+    
     setLoading(true);
+    
     try {
-      const baseUrl = window.location.origin;
-      const res = await fetch(`${baseUrl}/api/?action=get_station_info&pbl=${encodeURIComponent(pbl)}`);
-      const json = await res.json();
-      if (json.success && json.station) {
-        const mapped: StationData = {
-          ...INITIAL_STATE.station,
-          ...json.station,
-          cliente: json.station.cliente || json.station.ragione_sociale || json.station.gestore || '',
-          localita: json.station.localita || json.station.citta || '',
-          comune: json.station.comune || json.station.citta || '',
-          prov: json.station.prov || json.station.provincia || '',
-          codCliente: pbl,
-          data: json.station.data || json.savedData?.station?.data || data.station.data,
-          ora: json.station.ora || json.savedData?.station?.ora || data.station.ora,
-        };
-        setData({
-          station: mapped,
-          fuels: json.savedData?.fuels || INITIAL_STATE.fuels,
-          calcoli: json.savedData?.calcoli || INITIAL_STATE.calcoli
-        });
-        setHasLoadedData(true);
-        toast.success('Dati impianto caricati correttamente!');
-
-        // Carica lo storico
-        const hKey = `history_${pbl}`;
-        setHistoryData(JSON.parse(localStorage.getItem(hKey) || '[]'));
-        
+      // Simula un piccolo ritardo per l'effetto di caricamento
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      const storageKey = `station_${pbl}`;
+      const savedData = localStorage.getItem(storageKey);
+      
+      if (savedData) {
+        const parsedData = JSON.parse(savedData);
+        setData(parsedData);
+        toast.success(`Dati impianto ${pbl} caricati correttamente!`);
       } else {
-        toast.error('Impianto non trovato.');
+        // Crea un nuovo impianto vuoto
+        const newData = {
+          ...INITIAL_STATE,
+          station: {
+            ...INITIAL_STATE.station,
+            codCliente: pbl,
+            data: new Date().toISOString().split('T')[0],
+            ora: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+          }
+        };
+        setData(newData);
+        toast.success(`Nuovo impianto ${pbl} creato localmente!`);
       }
+      
+      // Carica lo storico
+      const hKey = `history_${pbl}`;
+      const storedHistory = localStorage.getItem(hKey);
+      if (storedHistory) {
+        setHistoryData(JSON.parse(storedHistory));
+      } else {
+        setHistoryData([]);
+      }
+      
+      setHasLoadedData(true);
     } catch (err) {
-      toast.error('Errore di connessione al server.');
-    } finally { setLoading(false); }
+      console.error(err);
+      toast.error('Errore nel caricamento dei dati locali.');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // --- SALVATAGGIO DATI (SENZA BACKEND) ---
   const handleSave = async () => {
+    if (!hasLoadedData || !pbl) {
+      toast.error('Carica prima un impianto');
+      return;
+    }
+    
     setSaving(true);
     const toastId = toast.loading('Salvataggio in corso...');
+    
     try {
-      const baseUrl = window.location.origin;
-      const res = await fetch(`${baseUrl}/api/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_reconciliation', pbl, data })
-      });
-      const json = await res.json();
-      if (json.success) {
-        toast.success('Salvato con successo!', { id: toastId });
-        
-        // --- SALVATAGGIO STORICO LOCALE ---
-        const historyKey = `history_${pbl}`;
-        const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
-        const newEntry = {
-          date: data.station.data,
-          spb: getFuelDiff('spb', data),
-          gasolio: getFuelDiff('gasolio', data),
-          supreme: getFuelDiff('supreme', data),
-          gpl: getFuelDiff('gpl', data),
-          timestamp: new Date().getTime()
-        };
-        // Tieni solo gli ultimi 30 giorni per evitare che esploda il localstorage
-        const updatedHistory = [...existingHistory, newEntry].slice(-30);
-        localStorage.setItem(historyKey, JSON.stringify(updatedHistory));
-        setHistoryData(updatedHistory);
-
+      // Simula un piccolo ritardo
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Salva i dati principali
+      const storageKey = `station_${pbl}`;
+      localStorage.setItem(storageKey, JSON.stringify(data));
+      
+      // Aggiorna lo storico
+      const historyKey = `history_${pbl}`;
+      const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
+      const newEntry = {
+        date: data.station.data,
+        spb: getFuelDiff('spb', data),
+        gasolio: getFuelDiff('gasolio', data),
+        supreme: getFuelDiff('supreme', data),
+        gpl: getFuelDiff('gpl', data),
+        timestamp: new Date().getTime()
+      };
+      
+      // Tieni solo gli ultimi 30 record per non riempire il localStorage
+      const updatedHistory = [...existingHistory, newEntry].slice(-30);
+      localStorage.setItem(historyKey, JSON.stringify(updatedHistory));
+      setHistoryData(updatedHistory);
+      
+      toast.success('Salvato con successo!', { id: toastId });
+      
+      // Avvia la stampa dopo il salvataggio
+      setTimeout(() => {
         window.print();
-      } else {
-        toast.error('Errore restituito dal server.', { id: toastId });
-      }
-    } catch {
-      toast.error('Impossibile completare il salvataggio.', { id: toastId });
-    } finally { setSaving(false); }
+      }, 500);
+      
+    } catch (err) {
+      console.error(err);
+      toast.error('Errore durante il salvataggio.', { id: toastId });
+    } finally {
+      setSaving(false);
+    }
   };
 
+  // --- NUOVO TURNO (RESET) ---
   const handleNew = () => {
+    if (!hasLoadedData) {
+      toast.error('Carica prima un impianto');
+      return;
+    }
+    
     setData(prev => {
       const newFuels = { ...prev.fuels };
       const fuelsList: FuelType[] = ['spb', 'gasolio', 'supreme', 'gpl'];
@@ -239,14 +262,23 @@ export default function App() {
           data: new Date().toISOString().split('T')[0],
           ora: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
         },
-        fuels: newFuels
+        fuels: newFuels,
+        calcoli: {
+          spb: createEmptyCalcoli(),
+          gasolio: createEmptyCalcoli(),
+          supreme: createEmptyCalcoli(),
+          gpl: createEmptyCalcoli()
+        }
       };
     });
-    toast.success('Nuovo turno! Chiusure e Cisterne azzerate, Data aggiornata.');
+    
+    toast.success('Nuovo turno! Chiusure, Cisterne e Calcoli azzerati. Data aggiornata.');
   };
 
   // --- UPDATE HANDLERS ---
-  const updateStation = (f: keyof StationData, v: string) => setData(p => ({ ...p, station: { ...p.station, [f]: v } }));
+  const updateStation = (f: keyof StationData, v: string) => {
+    setData(p => ({ ...p, station: { ...p.station, [f]: v } }));
+  };
   
   const updateFuel = (f: FuelType, key: 'dispensers' | 'cisterne', i: number, field: string, val: number) => {
     setData(prev => ({
@@ -256,7 +288,7 @@ export default function App() {
         [f]: {
           ...prev.fuels[f],
           [key]: prev.fuels[f][key].map((item, idx) => 
-            idx === i ? { ...item, [field]: Math.round(val) } : item
+            idx === i ? { ...item, [field]: Math.round(val) || 0 } : item
           )
         }
       }
@@ -264,7 +296,13 @@ export default function App() {
   };
 
   const updateCalcolo = (f: FuelType, k: keyof CalcoliData, v: number) => {
-    setData(p => ({ ...p, calcoli: { ...p.calcoli, [f]: { ...p.calcoli[f], [k]: Math.round(v) } } }));
+    setData(p => ({ 
+      ...p, 
+      calcoli: { 
+        ...p.calcoli, 
+        [f]: { ...p.calcoli[f], [k]: Math.round(v) || 0 } 
+      } 
+    }));
   };
 
   // --- CALCOLI STATISTICI ---
@@ -277,12 +315,7 @@ export default function App() {
     const totCarico = calc.rimananzeIniziali + calc.carico + calc.eccedRegistrate + calc.scattiVuoto + calc.eccedenzeTrasporto;
     const totScarico = erogato + calc.caliGiaRegistrati + calc.caliViaggio + calc.caliTecnici;
     const giacContabile = totCarico - totScarico;
-    
-    // DIFF: Effettiva - Contabile.
-    // Se Effettiva > Contabile -> Eccedenza (Positivo)
-    // Se Effettiva < Contabile -> Calo (Negativo)
     const diff = giacEffettiva - giacContabile;
-
     const caloAnnuo = erogato * ((f === 'spb' || f === 'gpl') ? 0.0025 : 0.000833);
 
     return [
@@ -306,7 +339,7 @@ export default function App() {
   };
 
   const shouldHideInPrint = (f: FuelType) => {
-    if (f === 'spb' || f === 'gasolio') return false; // Non nascondere mai questi due
+    if (f === 'spb' || f === 'gasolio') return false;
     const d = data.fuels[f].dispensers;
     const c = data.fuels[f].cisterne;
     const hasDispenserData = d.some(x => x.apertura > 0 || x.chiusura > 0);
@@ -440,7 +473,6 @@ export default function App() {
                 {[listSpb[i], listGasolio[i], listSupreme[i], listGpl[i]].map((cell, idx) => {
                   const fuels: FuelType[] = ['spb', 'gasolio', 'supreme', 'gpl'];
                   
-                  // Format the value specifically for diff vs normal
                   let displayVal = formatNum(Math.abs(cell.v));
                   if (cell.isDiff) {
                     displayVal = cell.v === 0 ? '0' : (cell.v > 0 ? '+' : '-') + ' ' + displayVal;
@@ -472,6 +504,7 @@ export default function App() {
 
   // --- LOGICA DI ACCESSO E ERRORI ---
   if (showError) return <div className="min-h-screen flex items-center justify-center text-[200px] animate-pulse">🖕🏼</div>;
+  
   if (!isLogged) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col md:flex-row font-sans selection:bg-blue-500 selection:text-white">
@@ -547,7 +580,7 @@ export default function App() {
               <div className="text-slate-400 text-[9px] font-medium uppercase tracking-wider">Recupero dati in corso</div>
             </div>
             <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-blue-700 w-full animate-loading-bar rounded-full" style={{ width: '40%' }} />
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-blue-700 w-full animate-loading-bar rounded-full" />
             </div>
           </div>
         </div>
@@ -621,7 +654,7 @@ export default function App() {
             <div className="flex flex-col">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Codice Impianto</label>
               <div className="flex gap-2">
-                <input className="flex-1 font-bold text-blue-900 border-b outline-none no-print" value={data.station.codCliente} onChange={e => { setPbl(e.target.value); updateStation('codCliente', e.target.value); }} />
+                <input className="flex-1 font-bold text-blue-900 border-b outline-none no-print" value={pbl} onChange={e => setPbl(e.target.value)} />
                 <button onClick={loadStation} className="no-print text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors"><Search size={18}/></button>
                 <span className="hidden-screen print-show font-bold">{data.station.codCliente}</span>
               </div>
