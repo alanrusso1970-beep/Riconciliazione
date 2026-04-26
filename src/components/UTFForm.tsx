@@ -30,8 +30,8 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
       const calc = data.calcoli[type];
       const erogato = fl.dispensers.reduce((sum: number, disp: any) => sum + Math.max(0, disp.chiusura - disp.apertura), 0);
       const giacEffettiva = fl.cisterne.reduce((s: number, c: any) => s + c.giacenza, 0);
-      const introdotto = calc.carico + calc.scattiVuoto + calc.eccedenzeTrasporto;
-      const eccedenze = calc.eccedRegistrate;
+      const introdotto = calc.carico + calc.scattiVuoto;
+      const eccedenze = calc.eccedRegistrate + calc.eccedenzeTrasporto;
       const totCarico = calc.rimananzeIniziali + introdotto + eccedenze;
       const cali = calc.caliGiaRegistrati + calc.caliViaggio + calc.caliTecnici;
       const totScarico = erogato + cali;
