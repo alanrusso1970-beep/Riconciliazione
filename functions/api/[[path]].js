@@ -54,7 +54,6 @@ export async function onRequest(context) {
   if (params.get('action') === 'get_station_csv') {
     const pbl = (params.get('pbl') || '').trim();
     try {
-      console.log(`[CSV Proxy] Fetching station data for PBL ${pbl}`);
       const csvRes = await fetch(STATION_SHEETS_CSV_URL, {
         headers: { 'User-Agent': 'Mozilla/5.0 FuelCare-Proxy/Cloudflare' },
         redirect: 'follow'
@@ -64,21 +63,39 @@ export async function onRequest(context) {
 
       const csvText = await csvRes.text();
       const lines = csvText.split(/\r?\n/);
-      let stationData = null;
+      if (lines.length < 1) throw new Error("File anagrafica vuoto");
 
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const row = parseCSVRow(line);
+      // Identificazione colonne tramite header (prima riga)
+      const headers = parseCSVRow(lines[0]).map(h => h.toUpperCase().trim());
+      const findIdx = (names) => {
+        for (const name of names) {
+          const idx = headers.indexOf(name.toUpperCase());
+          if (idx !== -1) return idx;
+        }
+        return -1;
+      };
+
+      const pblIdx = findIdx(['PBL', 'CODICE', 'ID']);
+      const cittaIdx = findIdx(['CITTÀ', 'CITY', 'LOCALITÀ']);
+      const indirizzoIdx = findIdx(['INDIRIZZO', 'ADDRESS']);
+      const provIdx = findIdx(['PROVINCIA', 'PROV', 'COMUNE']);
+      const gestoreIdx = findIdx(['GESTORE', 'MANAGER', 'DITTA']);
+      const capIdx = findIdx(['CAP', 'ZIP']);
+
+      let stationData = null;
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const row = parseCSVRow(lines[i]);
         
-        if (row.length >= 5 && row[0].trim() === pbl) {
-          // Mappatura: 0:PBL, 1:Città, 2:Indirizzo, 4:Provincia, 10:Gestore
+        const rowPbl = pblIdx !== -1 ? row[pblIdx]?.trim() : row[0]?.trim();
+        if (rowPbl === pbl) {
           stationData = {
-            pbl: row[0].trim(),
-            localita: row[1] || '',
-            indirizzo: row[2] || '',
-            cap: row[3] || '',
-            comune: row[4] || '',
-            gestore: row[10] || ''
+            pbl: rowPbl,
+            localita: cittaIdx !== -1 ? row[cittaIdx] : (row[1] || ''),
+            indirizzo: indirizzoIdx !== -1 ? row[indirizzoIdx] : (row[2] || ''),
+            cap: capIdx !== -1 ? row[capIdx] : (row[3] || ''),
+            comune: provIdx !== -1 ? row[provIdx] : (row[4] || ''),
+            gestore: gestoreIdx !== -1 ? row[gestoreIdx] : (row[10] || '')
           };
           break;
         }
@@ -90,13 +107,13 @@ export async function onRequest(context) {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } else {
-        return new Response(JSON.stringify({ success: false, message: `Impianto ${pbl} non trovato nel file anagrafica` }), {
+        return new Response(JSON.stringify({ success: false, message: `Impianto ${pbl} non trovato` }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
     } catch (error) {
-      return new Response(JSON.stringify({ success: false, message: `Errore lettura file: ${error.message}` }), {
+      return new Response(JSON.stringify({ success: false, message: `Errore: ${error.message}` }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });

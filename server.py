@@ -57,22 +57,39 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 with urllib.request.urlopen(req, context=ssl_context, timeout=30) as resp:
                     raw = resp.read().decode('utf-8', errors='replace')
                 reader = csv.reader(io.StringIO(raw))
-                for row in reader:
-                    if len(row) >= 5 and row[0].strip() == pbl:
+                rows = list(reader)
+                if not rows: raise Exception("File vuoto")
+
+                headers = [h.upper().strip() for h in rows[0]]
+                def find_idx(names):
+                    for name in names:
+                        if name.upper() in headers: return headers.index(name.upper())
+                    return -1
+
+                pbl_idx = find_idx(['PBL', 'CODICE', 'ID'])
+                citta_idx = find_idx(['CITTÀ', 'CITY', 'LOCALITÀ'])
+                indirizzo_idx = find_idx(['INDIRIZZO', 'ADDRESS'])
+                prov_idx = find_idx(['PROVINCIA', 'PROV', 'COMUNE'])
+                gestore_idx = find_idx(['GESTORE', 'MANAGER', 'DITTA'])
+                cap_idx = find_idx(['CAP', 'ZIP'])
+
+                for row in rows[1:]:
+                    row_pbl = row[pbl_idx].strip() if pbl_idx != -1 and len(row) > pbl_idx else (row[0].strip() if row else '')
+                    if row_pbl == pbl:
                         station_data = {
-                            'pbl': row[0].strip(),
-                            'localita': row[1].strip() if len(row) > 1 else '',
-                            'indirizzo': row[2].strip() if len(row) > 2 else '',
-                            'cap': row[3].strip() if len(row) > 3 else '',
-                            'comune': row[4].strip() if len(row) > 4 else '',
-                            'gestore': row[10].strip() if len(row) > 10 else ''
+                            'pbl': row_pbl,
+                            'localita': row[citta_idx].strip() if citta_idx != -1 and len(row) > citta_idx else '',
+                            'indirizzo': row[indirizzo_idx].strip() if indirizzo_idx != -1 and len(row) > indirizzo_idx else '',
+                            'cap': row[cap_idx].strip() if cap_idx != -1 and len(row) > cap_idx else '',
+                            'comune': row[prov_idx].strip() if prov_idx != -1 and len(row) > prov_idx else '',
+                            'gestore': row[gestore_idx].strip() if gestore_idx != -1 and len(row) > gestore_idx else ''
                         }
                         break
 
                 if station_data:
                     result = json.dumps({'success': True, 'station': station_data}).encode('utf-8')
                 else:
-                    result = json.dumps({'success': False, 'message': f'Impianto {pbl} non trovato nel file anagrafica'}).encode('utf-8')
+                    result = json.dumps({'success': False, 'message': f'Impianto {pbl} non trovato'}).encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -80,7 +97,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(result)
             except Exception as e:
                 print(f"[Proxy] CSV Station Error: {str(e)}")
-                self.send_error_json(f"Errore lettura file anagrafica: {str(e)}")
+                self.send_error_json(f"Errore: {str(e)}")
             return
 
         if qs.get('action') == ['get_history_csv']:
