@@ -273,7 +273,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
           <h3 className="font-bold uppercase text-[10px] mb-2 border-b border-black inline-block">Chiusure Erogatori per Prodotto</h3>
           <div className="grid grid-cols-5 gap-2">
             {fuels.map((f, i) => {
-              const dispensers = data.fuels[f]?.dispensers || [];
+              const dispensers = (data.fuels[f]?.dispensers || []).filter((d: any) => d.chiusura > 0);
               if (f === 'totale_gasolio') return <div key={f} className="border border-black p-1 bg-gray-50 flex items-center justify-center text-[9px] font-bold">---</div>;
               return (
                 <div key={f} className="border border-black p-1 min-h-[60px]">
