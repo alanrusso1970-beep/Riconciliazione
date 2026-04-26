@@ -100,7 +100,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
     protN: '',
     vidimatoData: '',
     ditta: data.station.gestore || '',
-    codiceDitta: 'IT00SRY',
+    codiceDitta: 'IT00',
     ubicazione: `${data.station.indirizzo} - ${data.station.comune}`,
     chiusoAlN: '',
     delData: data.station.data.split('-').reverse().join('/'),
@@ -130,8 +130,8 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
     const isTable2 = tableNum === 2;
     const currentTableData = isTable2 ? table2 : table1;
     const rowLabels = isTable2 ? [
-      { id: 'j', l: 'Rimanenza al 31/12/' },
-      { id: 'k', l: 'Introdotto dal 01/01/' },
+      { id: 'j', l: `Rimanenza al 31/12/${parseInt(extra.esercizioFinanziario) - 1}` },
+      { id: 'k', l: `Introdotto dal 01/01/${extra.esercizioFinanziario}` },
       { id: 'l', l: 'Eccedenze' },
       { id: 'm', l: 'Totale Carico (J+k+l)', bold: true },
       { id: 'n', l: 'Erogato' },
@@ -141,8 +141,8 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
       { id: 'r', l: 'Giacenza Effettiva' },
       { id: 'diff', l: 'DIFFERENZA (q-r)', bold: true }
     ] : [
-      { id: 'a', l: 'Rimanenza al 31/12/' },
-      { id: 'b', l: 'Introdotto dal 01/01/' },
+      { id: 'a', l: `Rimanenza al 31/12/${parseInt(extra.esercizioFinanziario) - 1}` },
+      { id: 'b', l: `Introdotto dal 01/01/${extra.esercizioFinanziario}` },
       { id: 'c', l: 'Eccedenze' },
       { id: 'd', l: 'Totale Carico (a+b+c)', bold: true },
       { id: 'e', l: 'Erogato' },
@@ -204,7 +204,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
           </h1>
         </div>
 
-        <div className="text-[12px] leading-relaxed mb-6 space-y-2">
+        <div className="text-[12px] leading-relaxed mb-6 space-y-2 text-justify">
           <p>
             Si trasmette il prospetto di chiusura del registro di carico e scarico 
             <strong> Prot. N. </strong> 
@@ -215,8 +215,13 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
             <input className="border-b border-black outline-none w-64 px-1" value={extra.ditta} onChange={e => handleChangeExtra('ditta', e.target.value)} />,
           </p>
           <p>
-            Codice Ditta <strong>{extra.codiceDitta}</strong>
-            <input className="border-b border-black outline-none w-32 px-1 ml-1" value={extra.codiceDitta.replace('IT00SRY', '')} onChange={e => handleChangeExtra('codiceDitta', 'IT00SRY' + e.target.value)} />,
+            Codice Ditta <strong>IT00</strong>
+            <input 
+              className="border-b border-black outline-none w-48 px-1 ml-1 font-bold" 
+              value={extra.codiceDitta.replace('IT00', '')} 
+              onChange={e => handleChangeExtra('codiceDitta', 'IT00' + e.target.value)} 
+              placeholder="___________________"
+            />,
             per l'esercizio del I.D.C. ubicato in 
             <input className="border-b border-black outline-none w-80 px-1" value={extra.ubicazione} onChange={e => handleChangeExtra('ubicazione', e.target.value)} />.
             Il registro è stato chiuso al <strong> N. </strong> 
