@@ -237,7 +237,7 @@ export default function App() {
     const toastId = toast.loading('Salvataggio in corso...');
     try {
       const baseUrl = window.location.origin;
-      const res = await fetch(`${baseUrl}/api/save`, {
+      const res = await fetch(`${baseUrl}/api/save?action=save_reconciliation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'save_reconciliation', pbl: data.station.codCliente, data })
@@ -249,10 +249,10 @@ export default function App() {
         loadStation();
         window.print();
       } else {
-        toast.error('Errore restituito dal server.', { id: toastId });
+        toast.error(json.message || 'Errore restituito dal server.', { id: toastId });
       }
-    } catch {
-      toast.error('Impossibile completare il salvataggio.', { id: toastId });
+    } catch (err: any) {
+      toast.error('Impossibile completare il salvataggio: ' + (err.message || 'Errore di rete'), { id: toastId });
     } finally { setSaving(false); }
   };
 

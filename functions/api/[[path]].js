@@ -121,13 +121,19 @@ export async function onRequest(context) {
   }
 
   // --- AZIONE: PROXY VERSO GOOGLE APPS SCRIPT ---
-  const action = params.get('action');
-  if (action) {
+  const action = params.get('action') || (url.pathname.endsWith('/save') ? 'save_reconciliation' : null);
+  
+  if (action || request.method === 'POST') {
     try {
-      let targetUrl = `${GAS_URL}?action=${action}`;
-      params.forEach((value, key) => {
-        if (key !== 'action') targetUrl += `&${key}=${encodeURIComponent(value)}`;
-      });
+      let targetUrl = GAS_URL;
+      if (action) {
+        targetUrl += `?action=${action}`;
+        params.forEach((value, key) => {
+          if (key !== 'action') targetUrl += `&${key}=${encodeURIComponent(value)}`;
+        });
+      } else {
+        targetUrl += url.search;
+      }
 
       if (request.method === 'POST') {
         const body = await request.text();
@@ -162,7 +168,7 @@ export async function onRequest(context) {
     }
   }
 
-  return new Response(JSON.stringify({ success: false, message: "Azione non specificata" }), {
+  return new Response(JSON.stringify({ success: false, message: "Azione non specificata o percorso non valido" }), {
     status: 404,
     headers: { 'Content-Type': 'application/json', ...corsHeaders }
   });
