@@ -115,25 +115,27 @@ export default function App() {
       const baseUrl = window.location.origin;
 
       // 1. Recupera i dati dal foglio impianti_completi (mappatura colonne corrette)
-      //    Col 2 -> localita, Col 3 -> indirizzo, Col 5 -> comune, Col 11 -> gestore
+      //    Col 2 -> localita, Col 3 -> indirizzo, Col 5 -> comune, Col 11 -> gestore      // Cache-busting per evitare risultati vecchi
+      const cacheBuster = `&_cb=${Date.now()}`;
+      
       const [csvRes, gasRes] = await Promise.all([
-        fetch(`${baseUrl}/api/?action=get_station_csv&pbl=${encodeURIComponent(currentPbl)}`),
-        fetch(`${baseUrl}/api/?action=get_station_info&pbl=${encodeURIComponent(currentPbl)}`).catch(() => null),
+        fetch(`${baseUrl}/api/?action=get_station_csv&pbl=${encodeURIComponent(currentPbl)}${cacheBuster}`),
+        fetch(`${baseUrl}/api/?action=get_station_info&pbl=${encodeURIComponent(currentPbl)}${cacheBuster}`).catch(() => null),
       ]);
 
       const csvJson = await csvRes.json();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gasJson: any = gasRes ? await gasRes.json().catch(() => ({})) : {};
 
-      // I dati dal foglio Google Sheets hanno priorità per gestore, indirizzo, comune, localita
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      console.log('[DEBUG] CSV Response:', csvJson);
+      console.log('[DEBUG] GAS Response:', gasJson);
+
+      // I dati dal foglio Google Sheets hanno priorità assoluta
       const sheetStation: any = csvJson.success ? csvJson.station : {};
       const savedData = gasJson.savedData || {};
 
       const mapped: StationData = {
         ...INITIAL_STATE.station,
         ...(savedData.station || {}),
-        // Priorità assoluta ai dati freschi del foglio anagrafica
         localita: sheetStation.localita || gasJson.station?.citta || savedData.station?.localita || '',
         indirizzo: sheetStation.indirizzo || gasJson.station?.indirizzo || savedData.station?.indirizzo || '',
         comune: sheetStation.comune || savedData.station?.comune || '',
@@ -146,7 +148,7 @@ export default function App() {
       };
 
       if (!csvJson.success && !gasJson.success) {
-        toast.error('Impianto non trovato nelle anagrafiche.');
+        toast.error(`Impianto ${currentPbl} non trovato nei file configurati.`);
         setLoading(false);
         return;
       }
@@ -158,10 +160,10 @@ export default function App() {
       });
       setHasLoadedData(true);
       
-      if (sheetStation.gestore) {
-        toast.success(`Dati caricati per ${sheetStation.gestore}`);
+      if (mapped.gestore) {
+        toast.success(`Dati caricati per: ${mapped.gestore}`);
       } else {
-        toast.success('Dati impianto caricati');
+        toast.success('Dati impianto caricati (Gestore mancante nel file)');
       }
 
       // --- CARICAMENTO STORICO DAL FILE (GOOGLE SHEETS) ---
