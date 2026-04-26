@@ -52,44 +52,57 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             pbl = (qs.get('pbl') or [''])[0].strip()
             print(f"[Proxy] Fetching station data for PBL={pbl}")
             try:
+                # Aggiungiamo un cache-buster alla URL del foglio Google
+                cb = os.urandom(4).hex()
+                csv_url = STATION_SHEETS_CSV_URL + f"&_cb={cb}"
                 station_data = None
-                req = urllib.request.Request(STATION_SHEETS_CSV_URL, headers={'User-Agent': 'Mozilla/5.0'})
+                req = urllib.request.Request(csv_url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, context=ssl_context, timeout=30) as resp:
-                    raw = resp.read().decode('utf-8', errors='replace')
+                    raw = resp.read().decode('utf-8-sig', errors='replace') # utf-8-sig gestisce il BOM
                 reader = csv.reader(io.StringIO(raw))
                 rows = list(reader)
                 if not rows: raise Exception("File vuoto")
 
                 headers = [h.upper().strip() for h in rows[0]]
+                print(f"[Proxy] Headers: {headers}")
+
                 def find_idx(names):
                     for name in names:
-                        if name.upper() in headers: return headers.index(name.upper())
+                        name_up = name.upper()
+                        if name_up in headers: return headers.index(name_up)
+                        # Cerca corrispondenza parziale se non trova quella esatta
+                        for i, h in enumerate(headers):
+                            if name_up in h: return i
                     return -1
 
                 pbl_idx = find_idx(['PBL', 'CODICE', 'ID'])
-                citta_idx = find_idx(['CITTÀ', 'CITY', 'LOCALITÀ'])
+                citta_idx = find_idx(['CITTÀ', 'CITY', 'LOCALITÀ', 'CITTA'])
                 indirizzo_idx = find_idx(['INDIRIZZO', 'ADDRESS'])
                 prov_idx = find_idx(['PROVINCIA', 'PROV', 'COMUNE'])
                 gestore_idx = find_idx(['GESTORE', 'MANAGER', 'DITTA'])
                 cap_idx = find_idx(['CAP', 'ZIP'])
 
                 for row in rows[1:]:
+                    if not row: continue
                     row_pbl = row[pbl_idx].strip() if pbl_idx != -1 and len(row) > pbl_idx else (row[0].strip() if row else '')
-                    if row_pbl == pbl:
+                    # Confronto robusto (senza zeri iniziali)
+                    if row_pbl.lstrip('0') == pbl.lstrip('0'):
                         station_data = {
                             'pbl': row_pbl,
-                            'localita': row[citta_idx].strip() if citta_idx != -1 and len(row) > citta_idx else '',
+                            'comune': row[citta_idx].strip() if citta_idx != -1 and len(row) > citta_idx else '',
+                            'localita': '', # Spesso vuoto o uguale a comune nel CSV
                             'indirizzo': row[indirizzo_idx].strip() if indirizzo_idx != -1 and len(row) > indirizzo_idx else '',
                             'cap': row[cap_idx].strip() if cap_idx != -1 and len(row) > cap_idx else '',
-                            'comune': row[prov_idx].strip() if prov_idx != -1 and len(row) > prov_idx else '',
+                            'prov': row[prov_idx].strip() if prov_idx != -1 and len(row) > prov_idx else '',
                             'gestore': row[gestore_idx].strip() if gestore_idx != -1 and len(row) > gestore_idx else ''
                         }
+                        print(f"[Proxy] Found station: {station_data['pbl']} - {station_data['gestore']}")
                         break
 
                 if station_data:
                     result = json.dumps({'success': True, 'station': station_data}).encode('utf-8')
                 else:
-                    result = json.dumps({'success': False, 'message': f'Impianto {pbl} non trovato'}).encode('utf-8')
+                    result = json.dumps({'success': False, 'message': f'Impianto {pbl} non trovato nel CSV'}).encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')

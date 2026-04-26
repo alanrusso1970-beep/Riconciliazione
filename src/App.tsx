@@ -140,7 +140,7 @@ export default function App() {
         indirizzo: sheetStation.indirizzo || gasJson.station?.indirizzo || savedData.station?.indirizzo || '',
         comune: sheetStation.comune || savedData.station?.comune || '',
         gestore: sheetStation.gestore || gasJson.station?.gestore || savedData.station?.gestore || '',
-        prov: sheetStation.comune || gasJson.station?.prov || gasJson.station?.provincia || savedData.station?.prov || '',
+        prov: sheetStation.prov || gasJson.station?.prov || gasJson.station?.provincia || savedData.station?.prov || '',
         marchio: gasJson.station?.marchio || savedData.station?.marchio || '',
         codCliente: currentPbl,
         data: savedData.station?.data || data.station.data,
@@ -163,7 +163,7 @@ export default function App() {
       if (mapped.gestore) {
         toast.success(`Dati caricati per: ${mapped.gestore}`);
       } else {
-        toast.success('Dati impianto caricati (Gestore mancante nel file)');
+        toast.error('Dati impianto caricati (Gestore mancante nel file)');
       }
 
       // --- CARICAMENTO STORICO DAL FILE (GOOGLE SHEETS) ---
