@@ -1,18 +1,43 @@
 /**
- * Cloudflare Pages Function - Proxy verso Google Apps Script
- * Sostituisce server.py per l'ambiente Cloudflare.
+ * Parsing robusto di una riga CSV (gestisce campi tra virgolette e doppie virgolette).
  */
+function parseCSVRow(text) {
+  const row = [];
+  let cell = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        // Gestione doppie virgolette (escaped)
+        cell += '"';
+        i++; 
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      row.push(cell.trim());
+      cell = '';
+    } else {
+      cell += char;
+    }
+  }
+  row.push(cell.trim());
+  return row;
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
-  const query = url.search;
+  const params = url.searchParams;
 
   // L'URL di Google Apps Script può essere configurato nelle impostazioni di Cloudflare (Environment Variables)
-  // Se non presente, usiamo quello di default.
   const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbxH2e9uh_DrzmBv7sfuwfN0drXedcpHtq3YFPWlKpA2F-3gn7EbvfBR9nfxzX7ksSfG/exec";
   // File Anagrafica (Impianti)
   const STATION_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432";
-  // File Riconciliazioni (GiacenzeStore) - Usato indirettamente tramite GAS per salvataggio e storico
+  // File Riconciliazioni (GiacenzeStore)
   const RECONCILIATION_SS_ID = "13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE";
 
   const corsHeaders = {
@@ -21,8 +46,11 @@ export async function onRequest(context) {
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 
-  // Gestione action get_station_csv: legge il foglio impianti_completi direttamente
-  const params = new URLSearchParams(url.search);
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  // --- AZIONE: RECUPERO ANAGRAFICA IMPIANTO DAL CSV ---
   if (params.get('action') === 'get_station_csv') {
     const pbl = (params.get('pbl') || '').trim();
     try {
@@ -43,15 +71,14 @@ export async function onRequest(context) {
         const row = parseCSVRow(line);
         
         if (row.length >= 5 && row[0].trim() === pbl) {
-          // MappaturaColonne per file 19dKi... (Anagrafica)
-          // Col 0: PBL, Col 1: Città, Col 2: Indirizzo, Col 4: Provincia, Col 10: Gestore
+          // Mappatura: 0:PBL, 1:Città, 2:Indirizzo, 4:Provincia, 10:Gestore
           stationData = {
             pbl: row[0].trim(),
-            localita: row[1] ? row[1].trim() : '',
-            indirizzo: row[2] ? row[2].trim() : '',
-            cap: row[3] ? row[3].trim() : '',
-            comune: row[4] ? row[4].trim() : '',
-            gestore: row[10] ? row[10].trim() : ''
+            localita: row[1] || '',
+            indirizzo: row[2] || '',
+            cap: row[3] || '',
+            comune: row[4] || '',
+            gestore: row[10] || ''
           };
           break;
         }
@@ -69,89 +96,57 @@ export async function onRequest(context) {
         });
       }
     } catch (error) {
-      console.error('[CSV Station Error]', error);
-      return new Response(JSON.stringify({ success: false, message: `Errore lettura file anagrafica: ${error.message}` }), {
+      return new Response(JSON.stringify({ success: false, message: `Errore lettura file: ${error.message}` }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
   }
 
-  const targetUrl = query ? `${GAS_URL}${query}` : GAS_URL;
+  // --- AZIONE: PROXY VERSO GOOGLE APPS SCRIPT ---
+  const action = params.get('action');
+  if (action) {
+    try {
+      let targetUrl = `${GAS_URL}?action=${action}`;
+      params.forEach((value, key) => {
+        if (key !== 'action') targetUrl += `&${key}=${encodeURIComponent(value)}`;
+      });
 
-  // Prepariamo gli header per la richiesta a Google
-  const headers = new Headers();
-  headers.set('User-Agent', 'Mozilla/5.0 FuelCare-Proxy/Cloudflare');
-  if (request.headers.get('Content-Type')) {
-    headers.set('Content-Type', request.headers.get('Content-Type'));
-  }
-
-  try {
-    const options = {
-      method: request.method,
-      headers: headers,
-      redirect: 'follow'
-    };
-
-    if (request.method === 'POST') {
-      options.body = await request.arrayBuffer();
-    }
-
-    console.log(`[Proxy] ${request.method} -> ${targetUrl}`);
-
-    const response = await fetch(targetUrl, options);
-    
-    // Leggiamo la risposta come Buffer/ArrayBuffer per non corrompere i dati
-    const responseData = await response.arrayBuffer();
-
-    // Restituiamo la risposta con gli header CORS necessari
-    return new Response(responseData, {
-      status: 200, // Forziamo 200 come faceva server.py in caso di successo del proxy
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders,
-        'X-Proxy-By': 'Cloudflare-Pages-Functions'
-      }
-    });
-
-  } catch (error) {
-    console.error('[Proxy Error]', error);
-    return new Response(JSON.stringify({
-      success: false,
-      message: `Errore Proxy Cloudflare: ${error.message}`
-    }), {
-      status: 200, // Restituiamo 200 con JSON di errore per compatibilità col frontend
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders
-      }
-    });
-  }
-}
-
-/**
- * Parsing robusto di una riga CSV (gestisce campi tra virgolette).
- */
-function parseCSVRow(line) {
-  const result = [];
-  let field = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        field += '"';
-        i++;
+      if (request.method === 'POST') {
+        const body = await request.text();
+        const gasRes = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body
+        });
+        const gasData = await gasRes.text();
+        return new Response(gasData, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
       } else {
-        inQuotes = !inQuotes;
+        const gasRes = await fetch(targetUrl);
+        const gasData = await gasRes.text();
+        const isJson = gasRes.headers.get('content-type')?.includes('application/json') || action !== 'get_history_csv';
+        
+        return new Response(gasData, {
+          status: 200,
+          headers: { 
+            'Content-Type': isJson ? 'application/json' : 'text/plain',
+            ...corsHeaders 
+          }
+        });
       }
-    } else if (ch === ',' && !inQuotes) {
-      result.push(field);
-      field = '';
-    } else {
-      field += ch;
+    } catch (error) {
+      return new Response(JSON.stringify({ success: false, message: error.message }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
     }
   }
-  result.push(field);
-  return result;
+
+  return new Response(JSON.stringify({ success: false, message: "Azione non specificata" }), {
+    status: 404,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+  });
 }

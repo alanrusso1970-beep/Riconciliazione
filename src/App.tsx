@@ -126,7 +126,6 @@ export default function App() {
       const gasJson: any = gasRes ? await gasRes.json().catch(() => ({})) : {};
 
       // I dati dal foglio Google Sheets hanno priorità per gestore, indirizzo, comune, localita
-      // Nota: GAS restituisce 'citta', il proxy CSV restituisce 'localita'
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sheetStation: any = csvJson.success ? csvJson.station : {};
       const savedData = gasJson.savedData || {};
@@ -134,10 +133,11 @@ export default function App() {
       const mapped: StationData = {
         ...INITIAL_STATE.station,
         ...(savedData.station || {}),
+        // Priorità assoluta ai dati freschi del foglio anagrafica
         localita: sheetStation.localita || gasJson.station?.citta || savedData.station?.localita || '',
         indirizzo: sheetStation.indirizzo || gasJson.station?.indirizzo || savedData.station?.indirizzo || '',
         comune: sheetStation.comune || savedData.station?.comune || '',
-        gestore: sheetStation.gestore || savedData.station?.gestore || '',
+        gestore: sheetStation.gestore || gasJson.station?.gestore || savedData.station?.gestore || '',
         prov: sheetStation.comune || gasJson.station?.prov || gasJson.station?.provincia || savedData.station?.prov || '',
         marchio: gasJson.station?.marchio || savedData.station?.marchio || '',
         codCliente: currentPbl,
@@ -157,7 +157,12 @@ export default function App() {
         calcoli: savedData.calcoli || INITIAL_STATE.calcoli
       });
       setHasLoadedData(true);
-      toast.success('Dati impianto caricati!');
+      
+      if (sheetStation.gestore) {
+        toast.success(`Dati caricati per ${sheetStation.gestore}`);
+      } else {
+        toast.success('Dati impianto caricati');
+      }
 
       // --- CARICAMENTO STORICO DAL FILE (GOOGLE SHEETS) ---
       try {
