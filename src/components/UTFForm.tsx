@@ -133,9 +133,9 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
       { id: 'j', l: `Rimanenza al 31/12/${parseInt(extra.esercizioFinanziario) - 1}` },
       { id: 'k', l: `Introdotto dal 01/01/${extra.esercizioFinanziario}` },
       { id: 'l', l: 'Eccedenze' },
-      { id: 'm', l: 'Totale Carico (J+k+l)', bold: true },
+      { id: 'm', l: 'Totale Carico (j+k+l)', bold: true },
       { id: 'n', l: 'Erogato' },
-      { id: 'o', l: 'Cali' },
+      { id: 'o', l: 'Cali (b: reg + c: viag + d: tecn)' },
       { id: 'p', l: 'Totale Scarico (n+o)', bold: true },
       { id: 'q', l: 'Giacenza Contabile' },
       { id: 'r', l: 'Giacenza Effettiva' },
@@ -146,7 +146,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
       { id: 'c', l: 'Eccedenze' },
       { id: 'd', l: 'Totale Carico (a+b+c)', bold: true },
       { id: 'e', l: 'Erogato' },
-      { id: 'f', l: 'Cali' },
+      { id: 'f', l: 'Cali (b: reg + c: viag + d: tecn)' },
       { id: 'g', l: 'Totale Scarico (e+f)', bold: true },
       { id: 'h', l: 'Giacenza Contabile' },
       { id: 'i', l: 'Giacenza Effettiva' },
@@ -155,7 +155,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
 
     return rowLabels.map((row) => (
       <tr key={row.id} className={row.bold ? 'font-bold bg-gray-50' : ''}>
-        <td className="border border-black p-1 text-[10px] w-48">
+        <td className="border border-black p-1 text-[10px] w-56">
           ({row.id}) <strong>{row.l}</strong>
         </td>
         {fuels.map((f) => (
@@ -175,7 +175,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
   return (
     <div className="fixed inset-0 bg-white z-[500] overflow-y-auto p-4 md:p-8 font-serif text-black print:p-0">
       {/* Barra strumenti non stampabile */}
-      <div className="max-w-5xl mx-auto mb-8 flex justify-between items-center no-print bg-slate-100 p-4 rounded-2xl border border-slate-200">
+      <div className="max-w-[1120px] mx-auto mb-8 flex justify-between items-center no-print bg-slate-100 p-4 rounded-2xl border border-slate-200">
         <div className="flex items-center gap-3 text-slate-800">
           <FileText className="text-blue-600" />
           <h2 className="font-bold">Comunicazione UTF Dogane</h2>
@@ -191,8 +191,8 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
       </div>
 
       {/* MODULO REALE */}
-      <div className="max-w-5xl mx-auto bg-white border border-transparent print:border-none p-4 md:p-8">
-        <div className="text-center mb-8">
+      <div className="max-w-[1120px] mx-auto bg-white border border-transparent print:border-none p-4 md:p-4 print:max-w-full">
+        <div className="text-center mb-4">
           <h1 className="text-xl font-black uppercase tracking-widest border-b-2 border-black pb-2 flex items-center justify-center gap-2">
             ALL'UFFICIO DELLE DOGANE DI 
             <input 
@@ -204,7 +204,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
           </h1>
         </div>
 
-        <div className="text-[12px] leading-relaxed mb-6 space-y-2 text-justify">
+        <div className="text-[11px] leading-tight mb-4 space-y-1 text-justify">
           <p>
             Si trasmette il prospetto di chiusura del registro di carico e scarico 
             <strong> Prot. N. </strong> 
@@ -239,10 +239,10 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
         </div>
 
         {/* TABELLA 1 */}
-        <table className="w-full border-collapse border border-black mb-8">
+        <table className="w-full border-collapse border border-black mb-4">
           <thead>
-            <tr className="bg-gray-100 font-bold text-[10px]">
-              <th className="border border-black p-1 w-48"></th>
+            <tr className="bg-gray-100 font-bold text-[9px]">
+              <th className="border border-black p-1 w-56"></th>
               {labels.map(l => <th key={l} className="border border-black p-1 text-center">{l}</th>)}
             </tr>
           </thead>
@@ -252,14 +252,14 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
         </table>
 
         {/* TABELLA 2 (RIEPILOGO) */}
-        <div className="mb-2 flex justify-between items-end text-[10px]">
+        <div className="mb-1 flex justify-between items-end text-[9px]">
           <h3 className="font-bold uppercase">RIEPILOGO ESERCIZIO FINANZIARI ANNO <input className="border-b border-black outline-none w-16 text-center" value={extra.annoRiepilogo} onChange={e => handleChangeExtra('annoRiepilogo', e.target.value)} /></h3>
           <span className="italic">(compilare in caso di chiusure intermedie per verifiche UTF o GdF)</span>
         </div>
-        <table className="w-full border-collapse border border-black mb-8">
+        <table className="w-full border-collapse border border-black mb-4">
           <thead>
-            <tr className="bg-gray-100 font-bold text-[10px]">
-              <th className="border border-black p-1 w-48"></th>
+            <tr className="bg-gray-100 font-bold text-[9px]">
+              <th className="border border-black p-1 w-56"></th>
               {labels.map(l => <th key={l} className="border border-black p-1 text-center">{l}</th>)}
             </tr>
           </thead>
@@ -268,20 +268,43 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
           </tbody>
         </table>
 
+        {/* VALORI CHIUSURE EROGATORI */}
+        <div className="mb-4">
+          <h3 className="font-bold uppercase text-[10px] mb-2 border-b border-black inline-block">Chiusure Erogatori per Prodotto</h3>
+          <div className="grid grid-cols-5 gap-2">
+            {fuels.map((f, i) => {
+              const dispensers = data.fuels[f]?.dispensers || [];
+              if (f === 'totale_gasolio') return <div key={f} className="border border-black p-1 bg-gray-50 flex items-center justify-center text-[9px] font-bold">---</div>;
+              return (
+                <div key={f} className="border border-black p-1 min-h-[60px]">
+                  <div className="font-bold text-[8px] border-b border-black mb-1 text-center truncate">{labels[i]}</div>
+                  {dispensers.map((d: any, idx: number) => (
+                    <div key={idx} className="flex justify-between text-[9px] leading-tight">
+                      <span>{d.nome || `P${idx+1}`}:</span>
+                      <span className="font-mono">{d.chiusura}</span>
+                    </div>
+                  ))}
+                  {dispensers.length === 0 && <div className="text-[8px] text-center italic text-gray-400">Nessun dato</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* NOTE E FIRMA */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12">
-          <div className="text-[11px] leading-relaxed">
-            <h4 className="font-bold underline mb-2">Note esplicative</h4>
+        <div className="grid grid-cols-2 gap-8 mt-4">
+          <div className="text-[10px] leading-tight">
+            <h4 className="font-bold underline mb-1 uppercase">Note esplicative</h4>
             <textarea 
-              className="w-full h-32 border-none outline-none resize-none bg-transparent"
+              className="w-full h-24 border-none outline-none resize-none bg-transparent"
               value={extra.note}
               onChange={e => handleChangeExtra('note', e.target.value)}
             />
           </div>
           <div className="text-center flex flex-col justify-end items-center">
-            <div className="border-t border-black w-64 pt-2 font-bold uppercase text-[12px]">
+            <div className="border-t border-black w-64 pt-2 font-bold uppercase text-[11px]">
               TIMBRO E FIRMA DELLA DITTA
-              <div className="h-24"></div>
+              <div className="h-16"></div>
             </div>
           </div>
         </div>
@@ -289,13 +312,17 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
 
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
+          @page { size: landscape; margin: 1cm; }
           .no-print { display: none !important; }
           body { background: white; margin: 0; padding: 0; }
-          .fixed { position: static !important; }
+          .fixed { position: static !important; overflow: visible !important; }
+          .max-w-5xl, .max-w-\[1120px\] { max-width: 100% !important; width: 100% !important; }
           textarea { height: auto !important; }
           input { border-bottom: 1px solid black !important; }
+          tr { page-break-inside: avoid; }
         }
       `}} />
     </div>
+
   );
 }
