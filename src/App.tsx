@@ -169,10 +169,11 @@ export default function App() {
         const lines = csvText.split('\n').map(l => l.trim()).filter(l => l !== '');
         if (lines.length > 0) {
           const parsedHistory = [];
+          let latestDataFromHistory: any = null;
+
           for (let i = 0; i < lines.length; i++) {
             try {
               const line = lines[i];
-              // Parsing robusto: cerchiamo le prime due virgole per isolare PBL e Data, il resto è JSON
               const firstComma = line.indexOf(',');
               if (firstComma === -1) continue;
               const secondComma = line.indexOf(',', firstComma + 1);
@@ -188,6 +189,8 @@ export default function App() {
               }
               
               const rowData = JSON.parse(jsonStr);
+              latestDataFromHistory = rowData; // L'ultima riga trovata per questo PBL sarà la più recente
+
               parsedHistory.push({
                 date: rowData.station?.data || '',
                 displayDate: (rowData.station?.data || '').split('-').reverse().join('/'),
@@ -202,6 +205,17 @@ export default function App() {
             }
           }
           setHistoryData(parsedHistory);
+
+          // Se non abbiamo dati salvati correnti, ma abbiamo trovato dati nello storico,
+          // popoliamo i campi con l'ultima riconciliazione trovata.
+          if (!gasJson.savedData && latestDataFromHistory) {
+            setData(prev => ({
+              ...prev,
+              fuels: latestDataFromHistory.fuels || prev.fuels,
+              calcoli: latestDataFromHistory.calcoli || prev.calcoli
+            }));
+            toast.success('Caricati dati dall\'ultima riconciliazione salvata.');
+          }
         }
       } catch (err) {
         console.error('Errore caricamento storico dal file:', err);
