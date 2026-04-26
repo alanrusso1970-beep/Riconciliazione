@@ -125,7 +125,8 @@ export default function App() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gasJson: any = gasRes ? await gasRes.json().catch(() => ({})) : {};
 
-      // I dati del foglio Google Sheets hanno priorità per gestore, indirizzo, comune, localita
+      // I dati dal foglio Google Sheets hanno priorità per gestore, indirizzo, comune, localita
+      // Nota: GAS restituisce 'citta', il proxy CSV restituisce 'localita'
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sheetStation: any = csvJson.success ? csvJson.station : {};
       const savedData = gasJson.savedData || {};
@@ -133,12 +134,10 @@ export default function App() {
       const mapped: StationData = {
         ...INITIAL_STATE.station,
         ...(savedData.station || {}),
-        // Dati dal foglio impianti_completi (colonne corrette):
-        localita: sheetStation.localita || savedData.station?.localita || '',
-        indirizzo: sheetStation.indirizzo || savedData.station?.indirizzo || '',
+        localita: sheetStation.localita || gasJson.station?.citta || savedData.station?.localita || '',
+        indirizzo: sheetStation.indirizzo || gasJson.station?.indirizzo || savedData.station?.indirizzo || '',
         comune: sheetStation.comune || savedData.station?.comune || '',
         gestore: sheetStation.gestore || savedData.station?.gestore || '',
-        // Campi dal GAS o dai dati salvati
         prov: sheetStation.comune || gasJson.station?.prov || gasJson.station?.provincia || savedData.station?.prov || '',
         marchio: gasJson.station?.marchio || savedData.station?.marchio || '',
         codCliente: currentPbl,
@@ -147,7 +146,7 @@ export default function App() {
       };
 
       if (!csvJson.success && !gasJson.success) {
-        toast.error('Impianto non trovato.');
+        toast.error('Impianto non trovato nelle anagrafiche.');
         setLoading(false);
         return;
       }
@@ -158,7 +157,7 @@ export default function App() {
         calcoli: savedData.calcoli || INITIAL_STATE.calcoli
       });
       setHasLoadedData(true);
-      toast.success('Dati impianto caricati correttamente!');
+      toast.success('Dati impianto caricati!');
 
       // --- CARICAMENTO STORICO DAL FILE (GOOGLE SHEETS) ---
       try {
@@ -189,7 +188,7 @@ export default function App() {
               }
               
               const rowData = JSON.parse(jsonStr);
-              latestDataFromHistory = rowData; // L'ultima riga trovata per questo PBL sarà la più recente
+              latestDataFromHistory = rowData;
 
               parsedHistory.push({
                 date: rowData.station?.data || '',
@@ -200,13 +199,11 @@ export default function App() {
                 gpl: getFuelDiff('gpl', rowData),
                 timestamp: i
               });
-            } catch (e) { 
-              if (i > 0) console.warn(`Errore parsing riga ${i}:`, e); 
-            }
+            } catch (e) { }
           }
           setHistoryData(parsedHistory);
 
-          // Se non abbiamo dati salvati correnti, ma abbiamo trovato dati nello storico,
+          // Se non abbiamo dati salvati correnti nel GAS (savedData), ma abbiamo trovato dati nello storico,
           // popoliamo i campi con l'ultima riconciliazione trovata.
           if (!gasJson.savedData && latestDataFromHistory) {
             setData(prev => ({
@@ -214,11 +211,11 @@ export default function App() {
               fuels: latestDataFromHistory.fuels || prev.fuels,
               calcoli: latestDataFromHistory.calcoli || prev.calcoli
             }));
-            toast.success('Caricati dati dall\'ultima riconciliazione salvata.');
+            toast.success('Caricati dati dall\'ultima riconciliazione salvata nello storico.');
           }
         }
       } catch (err) {
-        console.error('Errore caricamento storico dal file:', err);
+        console.error('Errore caricamento storico:', err);
       }
 
     } catch (err) {

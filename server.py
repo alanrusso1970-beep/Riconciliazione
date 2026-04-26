@@ -16,8 +16,10 @@ import io
 
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
 GAS_URL = "https://script.google.com/macros/s/AKfycbxH2e9uh_DrzmBv7sfuwfN0drXedcpHtq3YFPWlKpA2F-3gn7EbvfBR9nfxzX7ksSfG/exec"
-PRIMARY_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE/export?format=csv&gid=0"
-FALLBACK_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432"
+# File Anagrafica (Impianti)
+STATION_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432"
+# File Riconciliazioni (GiacenzeStore) - Usato indirettamente tramite GAS
+RECONCILIATION_SS_ID = "13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE"
 PORT = 8787
 
 # Fix SSL per macOS
@@ -48,37 +50,29 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
 
         if qs.get('action') == ['get_station_csv']:
             pbl = (qs.get('pbl') or [''])[0].strip()
-            print(f"[Proxy] Fetching station for PBL={pbl} from Google Sheets CSVs")
+            print(f"[Proxy] Fetching station data for PBL={pbl}")
             try:
                 station_data = None
-                # Proviamo entrambi i fogli
-                for csv_url in [PRIMARY_SHEETS_CSV_URL, FALLBACK_SHEETS_CSV_URL]:
-                    print(f"[Proxy] Trying CSV: {csv_url}")
-                    req = urllib.request.Request(csv_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    try:
-                        with urllib.request.urlopen(req, context=ssl_context, timeout=30) as resp:
-                            raw = resp.read().decode('utf-8', errors='replace')
-                        reader = csv.reader(io.StringIO(raw))
-                        for row in reader:
-                            if len(row) >= 5 and row[0].strip() == pbl:
-                                station_data = {
-                                    'pbl': row[0].strip(),
-                                    'localita': row[1].strip() if len(row) > 1,
-                                    'indirizzo': row[2].strip() if len(row) > 2,
-                                    'cap': row[3].strip() if len(row) > 3,
-                                    'comune': row[4].strip() if len(row) > 4,
-                                    'gestore': row[10].strip() if len(row) > 10 else (row[6].strip() if len(row) > 6 else '')
-                                }
-                                break
-                    except Exception as e:
-                        print(f"[Proxy] Error fetching/parsing {csv_url}: {e}")
-                        continue
-                    if station_data: break
+                req = urllib.request.Request(STATION_SHEETS_CSV_URL, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, context=ssl_context, timeout=30) as resp:
+                    raw = resp.read().decode('utf-8', errors='replace')
+                reader = csv.reader(io.StringIO(raw))
+                for row in reader:
+                    if len(row) >= 5 and row[0].strip() == pbl:
+                        station_data = {
+                            'pbl': row[0].strip(),
+                            'localita': row[1].strip() if len(row) > 1 else '',
+                            'indirizzo': row[2].strip() if len(row) > 2 else '',
+                            'cap': row[3].strip() if len(row) > 3 else '',
+                            'comune': row[4].strip() if len(row) > 4 else '',
+                            'gestore': row[10].strip() if len(row) > 10 else ''
+                        }
+                        break
 
                 if station_data:
                     result = json.dumps({'success': True, 'station': station_data}).encode('utf-8')
                 else:
-                    result = json.dumps({'success': False, 'message': f'Impianto {pbl} non trovato nei fogli Google'}).encode('utf-8')
+                    result = json.dumps({'success': False, 'message': f'Impianto {pbl} non trovato nel file anagrafica'}).encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -86,7 +80,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(result)
             except Exception as e:
                 print(f"[Proxy] CSV Station Error: {str(e)}")
-                self.send_error_json(f"Errore lettura fogli impianti: {str(e)}")
+                self.send_error_json(f"Errore lettura file anagrafica: {str(e)}")
             return
 
         if qs.get('action') == ['get_history_csv']:

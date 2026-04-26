@@ -10,8 +10,10 @@ export async function onRequest(context) {
   // L'URL di Google Apps Script può essere configurato nelle impostazioni di Cloudflare (Environment Variables)
   // Se non presente, usiamo quello di default.
   const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbxH2e9uh_DrzmBv7sfuwfN0drXedcpHtq3YFPWlKpA2F-3gn7EbvfBR9nfxzX7ksSfG/exec";
-  const PRIMARY_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE/export?format=csv&gid=0";
-  const FALLBACK_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432";
+  // File Anagrafica (Impianti)
+  const STATION_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432";
+  // File Riconciliazioni (GiacenzeStore) - Usato indirettamente tramite GAS per salvataggio e storico
+  const RECONCILIATION_SS_ID = "13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE";
 
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -24,42 +26,35 @@ export async function onRequest(context) {
   if (params.get('action') === 'get_station_csv') {
     const pbl = (params.get('pbl') || '').trim();
     try {
-      // Proviamo entrambi i fogli (Primario e Fallback)
-      const csvUrls = [PRIMARY_SHEETS_CSV_URL, FALLBACK_SHEETS_CSV_URL];
+      console.log(`[CSV Proxy] Fetching station data for PBL ${pbl}`);
+      const csvRes = await fetch(STATION_SHEETS_CSV_URL, {
+        headers: { 'User-Agent': 'Mozilla/5.0 FuelCare-Proxy/Cloudflare' },
+        redirect: 'follow'
+      });
+      
+      if (!csvRes.ok) throw new Error(`HTTP error! status: ${csvRes.status}`);
+
+      const csvText = await csvRes.text();
+      const lines = csvText.split(/\r?\n/);
       let stationData = null;
 
-      for (const csvUrl of csvUrls) {
-        console.log(`[CSV Proxy] Checking ${csvUrl} for PBL ${pbl}`);
-        const csvRes = await fetch(csvUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0 FuelCare-Proxy/Cloudflare' },
-          redirect: 'follow'
-        });
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const row = parseCSVRow(line);
         
-        if (!csvRes.ok) continue;
-
-        const csvText = await csvRes.text();
-        const lines = csvText.split(/\r?\n/);
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const row = parseCSVRow(line);
-          
-          // Mappatura colonne flessibile (cerchiamo il PBL nella prima colonna)
-          if (row.length >= 5 && row[0].trim() === pbl) {
-            // Mappatura standard (valida per entrambi i fogli forniti dall'utente)
-            // Col 0: PBL, Col 1: Città, Col 2: Indirizzo, Col 3: CAP, Col 4: Provincia, Col 10: Gestore
-            stationData = {
-              pbl: row[0].trim(),
-              localita: row[1] ? row[1].trim() : '',
-              indirizzo: row[2] ? row[2].trim() : '',
-              cap: row[3] ? row[3].trim() : '',
-              comune: row[4] ? row[4].trim() : '',
-              gestore: row[10] ? row[10].trim() : (row[6] ? row[6].trim() : '') // Fallback gestore se col 10 è vuota
-            };
-            break;
-          }
+        if (row.length >= 5 && row[0].trim() === pbl) {
+          // MappaturaColonne per file 19dKi... (Anagrafica)
+          // Col 0: PBL, Col 1: Città, Col 2: Indirizzo, Col 4: Provincia, Col 10: Gestore
+          stationData = {
+            pbl: row[0].trim(),
+            localita: row[1] ? row[1].trim() : '',
+            indirizzo: row[2] ? row[2].trim() : '',
+            cap: row[3] ? row[3].trim() : '',
+            comune: row[4] ? row[4].trim() : '',
+            gestore: row[10] ? row[10].trim() : ''
+          };
+          break;
         }
-        if (stationData) break;
       }
 
       if (stationData) {
@@ -68,14 +63,14 @@ export async function onRequest(context) {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } else {
-        return new Response(JSON.stringify({ success: false, message: `Impianto ${pbl} non trovato nei fogli Google` }), {
+        return new Response(JSON.stringify({ success: false, message: `Impianto ${pbl} non trovato nel file anagrafica` }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
     } catch (error) {
       console.error('[CSV Station Error]', error);
-      return new Response(JSON.stringify({ success: false, message: `Errore lettura fogli impianti: ${error.message}` }), {
+      return new Response(JSON.stringify({ success: false, message: `Errore lettura file anagrafica: ${error.message}` }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
