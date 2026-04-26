@@ -134,16 +134,12 @@ export default function App() {
         ...INITIAL_STATE.station,
         ...(savedData.station || {}),
         // Dati dal foglio impianti_completi (colonne corrette):
-        // Col 2 (Città) -> localita
-        // Col 3 (Indirizzo) -> indirizzo
-        // Col 5 (Provincia) -> comune
-        // Col 11 (Gestore) -> gestore
         localita: sheetStation.localita || savedData.station?.localita || '',
         indirizzo: sheetStation.indirizzo || savedData.station?.indirizzo || '',
         comune: sheetStation.comune || savedData.station?.comune || '',
         gestore: sheetStation.gestore || savedData.station?.gestore || '',
         // Campi dal GAS o dai dati salvati
-        prov: gasJson.station?.prov || gasJson.station?.provincia || savedData.station?.prov || '',
+        prov: sheetStation.comune || gasJson.station?.prov || gasJson.station?.provincia || savedData.station?.prov || '',
         marchio: gasJson.station?.marchio || savedData.station?.marchio || '',
         codCliente: currentPbl,
         data: savedData.station?.data || data.station.data,

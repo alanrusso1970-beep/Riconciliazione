@@ -10,7 +10,8 @@ export async function onRequest(context) {
   // L'URL di Google Apps Script può essere configurato nelle impostazioni di Cloudflare (Environment Variables)
   // Se non presente, usiamo quello di default.
   const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbxH2e9uh_DrzmBv7sfuwfN0drXedcpHtq3YFPWlKpA2F-3gn7EbvfBR9nfxzX7ksSfG/exec";
-  const SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432";
+  const PRIMARY_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE/export?format=csv&gid=0";
+  const FALLBACK_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432";
 
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -23,34 +24,42 @@ export async function onRequest(context) {
   if (params.get('action') === 'get_station_csv') {
     const pbl = (params.get('pbl') || '').trim();
     try {
-      const csvRes = await fetch(SHEETS_CSV_URL, {
-        headers: { 'User-Agent': 'Mozilla/5.0 FuelCare-Proxy/Cloudflare' },
-        redirect: 'follow'
-      });
-      const csvText = await csvRes.text();
-
-      // Parsing CSV riga per riga
-      const lines = csvText.split('\n');
+      // Proviamo entrambi i fogli (Primario e Fallback)
+      const csvUrls = [PRIMARY_SHEETS_CSV_URL, FALLBACK_SHEETS_CSV_URL];
       let stationData = null;
 
-      for (const line of lines) {
-        const row = parseCSVRow(line);
-        if (row.length >= 11 && row[0].trim() === pbl) {
-          // Mappatura colonne (0-indexed):
-          // Col 2 (idx 1) = Città -> localita
-          // Col 3 (idx 2) = Indirizzo -> indirizzo
-          // Col 5 (idx 4) = Provincia -> comune
-          // Col 11 (idx 10) = Gestore -> gestore
-          stationData = {
-            pbl: row[0].trim(),
-            localita: row[1].trim(),
-            indirizzo: row[2].trim(),
-            cap: row[3].trim(),
-            comune: row[4].trim(),
-            gestore: row[10].trim()
-          };
-          break;
+      for (const csvUrl of csvUrls) {
+        console.log(`[CSV Proxy] Checking ${csvUrl} for PBL ${pbl}`);
+        const csvRes = await fetch(csvUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 FuelCare-Proxy/Cloudflare' },
+          redirect: 'follow'
+        });
+        
+        if (!csvRes.ok) continue;
+
+        const csvText = await csvRes.text();
+        const lines = csvText.split(/\r?\n/);
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const row = parseCSVRow(line);
+          
+          // Mappatura colonne flessibile (cerchiamo il PBL nella prima colonna)
+          if (row.length >= 5 && row[0].trim() === pbl) {
+            // Mappatura standard (valida per entrambi i fogli forniti dall'utente)
+            // Col 0: PBL, Col 1: Città, Col 2: Indirizzo, Col 3: CAP, Col 4: Provincia, Col 10: Gestore
+            stationData = {
+              pbl: row[0].trim(),
+              localita: row[1] ? row[1].trim() : '',
+              indirizzo: row[2] ? row[2].trim() : '',
+              cap: row[3] ? row[3].trim() : '',
+              comune: row[4] ? row[4].trim() : '',
+              gestore: row[10] ? row[10].trim() : (row[6] ? row[6].trim() : '') // Fallback gestore se col 10 è vuota
+            };
+            break;
+          }
         }
+        if (stationData) break;
       }
 
       if (stationData) {
@@ -59,14 +68,14 @@ export async function onRequest(context) {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } else {
-        return new Response(JSON.stringify({ success: false, message: `Impianto ${pbl} non trovato nel foglio impianti_completi` }), {
+        return new Response(JSON.stringify({ success: false, message: `Impianto ${pbl} non trovato nei fogli Google` }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
     } catch (error) {
       console.error('[CSV Station Error]', error);
-      return new Response(JSON.stringify({ success: false, message: `Errore lettura foglio impianti: ${error.message}` }), {
+      return new Response(JSON.stringify({ success: false, message: `Errore lettura fogli impianti: ${error.message}` }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });

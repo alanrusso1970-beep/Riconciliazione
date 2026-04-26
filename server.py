@@ -16,7 +16,8 @@ import io
 
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
 GAS_URL = "https://script.google.com/macros/s/AKfycbxH2e9uh_DrzmBv7sfuwfN0drXedcpHtq3YFPWlKpA2F-3gn7EbvfBR9nfxzX7ksSfG/exec"
-SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432"
+PRIMARY_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE/export?format=csv&gid=0"
+FALLBACK_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432"
 PORT = 8787
 
 # Fix SSL per macOS
@@ -47,35 +48,37 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
 
         if qs.get('action') == ['get_station_csv']:
             pbl = (qs.get('pbl') or [''])[0].strip()
-            print(f"[Proxy] Fetching station from Google Sheets CSV for PBL={pbl}")
+            print(f"[Proxy] Fetching station for PBL={pbl} from Google Sheets CSVs")
             try:
-                req = urllib.request.Request(SHEETS_CSV_URL, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, context=ssl_context, timeout=30) as resp:
-                    raw = resp.read().decode('utf-8', errors='replace')
-                reader = csv.reader(io.StringIO(raw))
                 station_data = None
-                for row in reader:
-                    if len(row) >= 11 and row[0].strip() == pbl:
-                        # Mappatura colonne (0-indexed):
-                        # Col 1 (idx 0) = PBL
-                        # Col 2 (idx 1) = Città -> localita
-                        # Col 3 (idx 2) = Indirizzo -> indirizzo
-                        # Col 4 (idx 3) = CAP
-                        # Col 5 (idx 4) = Provincia -> comune
-                        # Col 11 (idx 10) = Gestore -> gestore
-                        station_data = {
-                            'pbl': row[0].strip(),
-                            'localita': row[1].strip(),
-                            'indirizzo': row[2].strip(),
-                            'cap': row[3].strip(),
-                            'comune': row[4].strip(),
-                            'gestore': row[10].strip() if len(row) > 10 else ''
-                        }
-                        break
+                # Proviamo entrambi i fogli
+                for csv_url in [PRIMARY_SHEETS_CSV_URL, FALLBACK_SHEETS_CSV_URL]:
+                    print(f"[Proxy] Trying CSV: {csv_url}")
+                    req = urllib.request.Request(csv_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    try:
+                        with urllib.request.urlopen(req, context=ssl_context, timeout=30) as resp:
+                            raw = resp.read().decode('utf-8', errors='replace')
+                        reader = csv.reader(io.StringIO(raw))
+                        for row in reader:
+                            if len(row) >= 5 and row[0].strip() == pbl:
+                                station_data = {
+                                    'pbl': row[0].strip(),
+                                    'localita': row[1].strip() if len(row) > 1,
+                                    'indirizzo': row[2].strip() if len(row) > 2,
+                                    'cap': row[3].strip() if len(row) > 3,
+                                    'comune': row[4].strip() if len(row) > 4,
+                                    'gestore': row[10].strip() if len(row) > 10 else (row[6].strip() if len(row) > 6 else '')
+                                }
+                                break
+                    except Exception as e:
+                        print(f"[Proxy] Error fetching/parsing {csv_url}: {e}")
+                        continue
+                    if station_data: break
+
                 if station_data:
                     result = json.dumps({'success': True, 'station': station_data}).encode('utf-8')
                 else:
-                    result = json.dumps({'success': False, 'message': f'Impianto {pbl} non trovato nel foglio impianti_completi'}).encode('utf-8')
+                    result = json.dumps({'success': False, 'message': f'Impianto {pbl} non trovato nei fogli Google'}).encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -83,7 +86,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(result)
             except Exception as e:
                 print(f"[Proxy] CSV Station Error: {str(e)}")
-                self.send_error_json(f"Errore lettura foglio impianti: {str(e)}")
+                self.send_error_json(f"Errore lettura fogli impianti: {str(e)}")
             return
 
         if qs.get('action') == ['get_history_csv']:
