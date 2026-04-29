@@ -36,7 +36,7 @@ Per sicurezza, l'URL di Google Script è configurato come variabile di ambiente.
 2. Vai su **Environment variables**.
 3. Aggiungi una variabile in **Production**:
    - **Variable name**: `GAS_URL`
-   - **Value**: `https://script.google.com/macros/s/AKfycbxH2e9uh_DrzmBv7sfuwfN0drXedcpHtq3YFPWlKpA2F-3gn7EbvfBR9nfxzX7ksSfG/exec`
+   - **Value**: `https://script.google.com/macros/s/AKfycbwaxTXHi4RXmgdTWMMWPnABqnxroWRbYNv6BsWWz73bvxeV_g56R7_yiZFbdl_WjOLa/exec`
 4. Fai lo stesso per **Preview** se necessario.
 5. **IMPORTANTE**: Dopo aver aggiunto la variabile, devi far ripartire una build (o fare un nuovo push su GitHub) affinché la modifica sia attiva.
 

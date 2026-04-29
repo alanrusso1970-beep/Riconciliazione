@@ -12,7 +12,7 @@ export default {
       
       // 1. Proxy per il CSV dello storico via GAS
       if (url.searchParams.get('action') === 'get_history_csv') {
-        const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbxH2e9uh_DrzmBv7sfuwfN0drXedcpHtq3YFPWlKpA2F-3gn7EbvfBR9nfxzX7ksSfG/exec";
+        const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbwaxTXHi4RXmgdTWMMWPnABqnxroWRbYNv6BsWWz73bvxeV_g56R7_yiZFbdl_WjOLa/exec";
         const targetUrl = `${GAS_URL}?action=get_history_csv`;
         try {
           const response = await fetch(targetUrl, { redirect: 'follow' });
@@ -33,7 +33,7 @@ export default {
       }
 
       // 2. Proxy verso Google Apps Script
-      const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbxH2e9uh_DrzmBv7sfuwfN0drXedcpHtq3YFPWlKpA2F-3gn7EbvfBR9nfxzX7ksSfG/exec";
+      const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbwaxTXHi4RXmgdTWMMWPnABqnxroWRbYNv6BsWWz73bvxeV_g56R7_yiZFbdl_WjOLa/exec";
       const targetUrl = query ? `${GAS_URL}${query}` : GAS_URL;
 
       const headers = new Headers();

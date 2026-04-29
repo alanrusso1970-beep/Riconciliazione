@@ -34,7 +34,7 @@ export async function onRequest(context) {
   const params = url.searchParams;
 
   // L'URL di Google Apps Script può essere configurato nelle impostazioni di Cloudflare (Environment Variables)
-  const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbxH2e9uh_DrzmBv7sfuwfN0drXedcpHtq3YFPWlKpA2F-3gn7EbvfBR9nfxzX7ksSfG/exec";
+  const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbwaxTXHi4RXmgdTWMMWPnABqnxroWRbYNv6BsWWz73bvxeV_g56R7_yiZFbdl_WjOLa/exec";
   // File Anagrafica (Impianti)
   const STATION_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432";
   // File Riconciliazioni (GiacenzeStore)
