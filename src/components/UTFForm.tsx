@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Printer, FileText } from 'lucide-react';
 
 interface UTFFormProps {
@@ -93,20 +93,20 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
   };
 
   const [table1, setTable1] = useState(getInitialTableData('a', false));
-  const [table2, setTable2] = useState(getInitialTableData('j', true)); // Seconda tabella inizialmente VUOTA
+  const [table2, setTable2] = useState(getInitialTableData('j', true)); 
 
   const [extra, setExtra] = useState({
-    ufficioDogane: 'SIRACUSA',
+    ufficioDogane: 'CATANIA',
     protN: '',
     vidimatoData: '',
-    ditta: data.station.gestore || '',
+    ditta: (data.station.gestore || '').toUpperCase(),
     codiceDitta: 'IT00',
-    ubicazione: `${data.station.indirizzo} - ${data.station.comune}`,
+    ubicazione: `${(data.station.indirizzo || '').toUpperCase()}, ${(data.station.comune || '').toUpperCase()} - ${(data.station.localita || '').toUpperCase()}`,
     chiusoAlN: '',
     delData: data.station.data.split('-').reverse().join('/'),
     esercizioFinanziario: new Date().getFullYear().toString(),
     documentiAllegati: '',
-    note: `Le rimanenze effettive sono state riportate sul registro di carico e scarico n° ____ / ____ vidimato il ____________ per l'anno ________.\nIl registro di cui al presente prospetto verrà custodito, per il previsto periodo di anni 5, al seguente indirizzo: ${data.station.indirizzo} - ${data.station.comune}`,
+    note: `Le rimanenze effettive sono state riportate sul registro di carico e scarico n° ____ / ____ vidimato il ____________ per l'anno\nIl registro di cui al presente prospetto verrà custodito, per il previsto periodo di anni 5, al seguente indirizzo: ${(data.station.indirizzo || '').toUpperCase()} - ${(data.station.comune || '').toUpperCase()}`,
     annoRiepilogo: new Date().getFullYear().toString(),
   });
 
@@ -154,18 +154,21 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
     ];
 
     return rowLabels.map((row) => (
-      <tr key={row.id} className={row.bold ? 'font-bold bg-gray-50' : ''}>
-        <td className="border border-black p-1 text-[10px] w-56">
-          ({row.id}) <strong>{row.l}</strong>
+      <tr key={row.id}>
+        <td className="border border-black p-1 text-[9px] w-56 font-bold whitespace-nowrap">
+          ({row.id}) {row.l}
         </td>
         {fuels.map((f) => (
-          <td key={f} className="border border-black p-0 text-right font-mono text-[10px]">
+          <td key={f} className="border border-black p-0 text-right font-black text-[10px]">
             <input 
               type="number" 
-              className="w-full h-full p-1 text-right border-none outline-none bg-transparent"
+              className="w-full h-full p-0.5 text-right border-none outline-none bg-transparent font-black no-print"
               value={currentTableData[row.id][f] === 0 ? '' : currentTableData[row.id][f]} 
               onChange={e => handleChangeTable(tableNum, row.id, f, e.target.value)}
             />
+            <span className="hidden print:block pr-1 font-black text-black">
+              {currentTableData[row.id][f] === 0 ? '' : currentTableData[row.id][f]}
+            </span>
           </td>
         ))}
       </tr>
@@ -173,77 +176,93 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-white z-[500] overflow-y-auto p-4 md:p-8 font-serif text-black print:p-0">
+    <div className="fixed inset-0 bg-white z-[500] overflow-y-auto p-2 md:p-8 font-serif text-black print:static print:p-0 print:overflow-visible">
       {/* Barra strumenti non stampabile */}
-      <div className="max-w-[1120px] mx-auto mb-8 flex justify-between items-center no-print bg-slate-100 p-4 rounded-2xl border border-slate-200">
-        <div className="flex items-center gap-3 text-slate-800">
-          <FileText className="text-blue-600" />
-          <h2 className="font-bold">Comunicazione UTF Dogane</h2>
+      <div className="max-w-[1100px] mx-auto mb-2 flex justify-between items-center no-print bg-slate-100 p-2 rounded-xl border border-slate-200">
+        <div className="flex items-center gap-2 text-slate-800">
+          <FileText size={18} className="text-blue-600" />
+          <h2 className="font-bold text-sm">Comunicazione UTF Dogane</h2>
         </div>
-        <div className="flex gap-4">
-          <button onClick={() => window.print()} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-500 transition-all shadow-lg shadow-blue-200">
-            <Printer size={20} /> STAMPA MODULO
+        <div className="flex gap-2">
+          <button onClick={() => window.print()} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-1.5 rounded-lg font-bold hover:bg-blue-500 transition-all text-xs">
+            <Printer size={16} /> STAMPA
           </button>
-          <button onClick={onClose} className="flex items-center gap-2 bg-white text-slate-600 border border-slate-200 px-6 py-2 rounded-xl font-bold hover:bg-slate-50 transition-all">
-            <X size={20} /> CHIUDI
+          <button onClick={onClose} className="flex items-center gap-2 bg-white text-slate-600 border border-slate-200 px-4 py-1.5 rounded-lg font-bold hover:bg-slate-50 transition-all text-xs">
+            <X size={16} /> CHIUDI
           </button>
         </div>
       </div>
 
       {/* MODULO REALE */}
-      <div className="max-w-[1120px] mx-auto bg-white border border-transparent print:border-none p-4 md:p-4 print:max-w-full">
-        <div className="text-center mb-4">
-          <h1 className="text-xl font-black uppercase tracking-widest border-b-2 border-black pb-2 flex items-center justify-center gap-2">
-            ALL'UFFICIO DELLE DOGANE DI 
-            <input 
-              className="border-b border-black outline-none w-64 text-center font-black uppercase" 
-              value={extra.ufficioDogane} 
-              onChange={e => handleChangeExtra('ufficioDogane', e.target.value)} 
-              placeholder="____________________"
-            />
-          </h1>
+      <div className="max-w-[1100px] mx-auto bg-white p-2 print:p-0 print:max-w-full text-black">
+        {/* HEADER */}
+        <div className="border-b-2 border-black pb-1 mb-2">
+          <div className="flex justify-between items-end">
+            <h1 className="text-xl font-black uppercase tracking-widest whitespace-nowrap">
+              ALL'UFFICIO DELLE DOGANE DI
+            </h1>
+            <div className="flex-1 border-b-2 border-black mx-4 relative h-8">
+              <input 
+                className="absolute inset-0 w-full bg-transparent border-none outline-none text-center font-black uppercase text-xl no-print" 
+                value={extra.ufficioDogane} 
+                onChange={e => handleChangeExtra('ufficioDogane', e.target.value)} 
+              />
+              <span className="hidden print:block text-center font-black text-xl uppercase pt-0.5">
+                {extra.ufficioDogane}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="text-[11px] leading-tight mb-4 space-y-1 text-justify">
-          <p>
-            Si trasmette il prospetto di chiusura del registro di carico e scarico 
-            <strong> Prot. N. </strong> 
-            <input className="border-b border-black outline-none w-24 text-center px-1" value={extra.protN} onChange={e => handleChangeExtra('protN', e.target.value)} />
-            vidimato in data 
-            <input className="border-b border-black outline-none w-32 text-center px-1" value={extra.vidimatoData} onChange={e => handleChangeExtra('vidimatoData', e.target.value)} />
-            della ditta 
-            <input className="border-b border-black outline-none w-64 px-1" value={extra.ditta} onChange={e => handleChangeExtra('ditta', e.target.value)} />,
-          </p>
-          <p>
-            Codice Ditta <strong>IT00</strong>
-            <input 
-              className="border-b border-black outline-none w-48 px-1 ml-1 font-bold" 
-              value={extra.codiceDitta.replace('IT00', '')} 
-              onChange={e => handleChangeExtra('codiceDitta', 'IT00' + e.target.value)} 
-              placeholder="___________________"
-            />,
-            per l'esercizio del I.D.C. ubicato in 
-            <input className="border-b border-black outline-none w-80 px-1" value={extra.ubicazione} onChange={e => handleChangeExtra('ubicazione', e.target.value)} />.
-            Il registro è stato chiuso al <strong> N. </strong> 
-            <input className="border-b border-black outline-none w-20 text-center px-1" value={extra.chiusoAlN} onChange={e => handleChangeExtra('chiusoAlN', e.target.value)} />
-            del 
-            <input className="border-b border-black outline-none w-32 text-center px-1" value={extra.delData} onChange={e => handleChangeExtra('delData', e.target.value)} />
-          </p>
-          <p>
-            d'ordine del carico per FINE ESERCIZIO FINANZIARIO 
-            <input className="border-b border-black outline-none w-24 text-center px-1 font-bold" value={extra.esercizioFinanziario} onChange={e => handleChangeExtra('esercizioFinanziario', e.target.value)} />.
-            Al suddetto registro sono allegati n. 
-            <input className="border-b border-black outline-none w-16 text-center px-1" value={extra.documentiAllegati} onChange={e => handleChangeExtra('documentiAllegati', e.target.value)} />
-            documenti di CARICO.
-          </p>
+        {/* TESTO DESCRITTIVO */}
+        <div className="text-[11px] leading-relaxed mb-3 space-y-1.5 px-1">
+          <div className="flex flex-wrap items-end gap-x-1">
+            <span>Si trasmette il prospetto di chiusura del registro di carico e scarico <strong>Prot. N.</strong></span>
+            <div className="border-b border-black min-w-[120px] relative h-4">
+              <input className="absolute inset-0 w-full bg-transparent border-none outline-none text-center font-black no-print" value={extra.protN} onChange={e => handleChangeExtra('protN', e.target.value)} />
+              <span className="hidden print:block text-center font-black">{extra.protN}</span>
+            </div>
+            <span>vidimato in data</span>
+            <div className="border-b border-black min-w-[140px] relative h-4">
+              <input className="absolute inset-0 w-full bg-transparent border-none outline-none text-center font-black no-print" value={extra.vidimatoData} onChange={e => handleChangeExtra('vidimatoData', e.target.value)} />
+              <span className="hidden print:block text-center font-black">{extra.vidimatoData}</span>
+            </div>
+            <span>della ditta</span>
+            <span className="font-black border-b border-black px-1 uppercase">{extra.ditta}</span>
+            <span>,</span>
+          </div>
+          <div className="flex flex-wrap items-end gap-x-1">
+            <span>Codice Ditta <strong>IT00</strong></span>
+            <div className="border-b border-black min-w-[180px] relative h-4">
+              <input className="absolute inset-0 w-full bg-transparent border-none outline-none px-1 font-black no-print" value={extra.codiceDitta.replace('IT00', '')} onChange={e => handleChangeExtra('codiceDitta', 'IT00' + e.target.value)} />
+              <span className="hidden print:block px-1 font-black">{extra.codiceDitta.replace('IT00', '')}</span>
+            </div>
+            <span>, per l'esercizio del I.D.C. ubicato in</span>
+            <span className="font-black border-b border-black px-1 uppercase">{extra.ubicazione}</span>
+            <span>. Il registro è stato chiuso al <strong>N.</strong></span>
+            <div className="border-b border-black min-w-[80px] relative h-4">
+              <input className="absolute inset-0 w-full bg-transparent border-none outline-none text-center font-black no-print" value={extra.chiusoAlN} onChange={e => handleChangeExtra('chiusoAlN', e.target.value)} />
+              <span className="hidden print:block text-center font-black">{extra.chiusoAlN}</span>
+            </div>
+            <span>del</span>
+          </div>
+          <div className="flex flex-wrap items-end gap-x-1 no-print">
+            <span className="font-black border-b border-black px-4">{extra.delData}</span>
+            <span>d'ordine del carico per FINE ESERCIZIO FINANZIARIO <strong>{extra.esercizioFinanziario}</strong>. Al suddetto registro sono allegati n.</span>
+            <div className="border-b border-black min-w-[60px] relative h-4">
+              <input className="absolute inset-0 w-full bg-transparent border-none outline-none text-center font-black no-print" value={extra.documentiAllegati} onChange={e => handleChangeExtra('documentiAllegati', e.target.value)} />
+              <span className="hidden print:block text-center font-black">{extra.documentiAllegati}</span>
+            </div>
+            <span>documenti di CARICO.</span>
+          </div>
         </div>
 
         {/* TABELLA 1 */}
-        <table className="w-full border-collapse border border-black mb-4">
+        <table className="w-full border-collapse border-2 border-black mb-3">
           <thead>
-            <tr className="bg-gray-100 font-bold text-[9px]">
-              <th className="border border-black p-1 w-56"></th>
-              {labels.map(l => <th key={l} className="border border-black p-1 text-center">{l}</th>)}
+            <tr className="bg-gray-50 font-black text-[10px]">
+              <th className="border border-black p-1.5 w-56 text-left"></th>
+              {labels.map(l => <th key={l} className="border border-black p-1.5 text-center">{l}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -252,15 +271,15 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
         </table>
 
         {/* TABELLA 2 (RIEPILOGO) */}
-        <div className="mb-1 flex justify-between items-end text-[9px]">
-          <h3 className="font-bold uppercase">RIEPILOGO ESERCIZIO FINANZIARI ANNO <input className="border-b border-black outline-none w-16 text-center" value={extra.annoRiepilogo} onChange={e => handleChangeExtra('annoRiepilogo', e.target.value)} /></h3>
-          <span className="italic">(compilare in caso di chiusure intermedie per verifiche UTF o GdF)</span>
+        <div className="mb-0.5 flex justify-between items-end text-[10px] px-1 font-bold">
+          <span>RIEPILOGO ESERCIZIO FINANZIARI ANNO <strong className="ml-1 border-b border-black px-2">{extra.annoRiepilogo}</strong></span>
+          <span className="italic text-[8px] font-normal">(compilare in caso di chiusure intermedie per verifiche UTF o GdF)</span>
         </div>
-        <table className="w-full border-collapse border border-black mb-4">
+        <table className="w-full border-collapse border-2 border-black mb-3">
           <thead>
-            <tr className="bg-gray-100 font-bold text-[9px]">
-              <th className="border border-black p-1 w-56"></th>
-              {labels.map(l => <th key={l} className="border border-black p-1 text-center">{l}</th>)}
+            <tr className="bg-gray-50 font-black text-[10px]">
+              <th className="border border-black p-1.5 w-56 text-left"></th>
+              {labels.map(l => <th key={l} className="border border-black p-1.5 text-center">{l}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -269,22 +288,30 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
         </table>
 
         {/* VALORI CHIUSURE EROGATORI */}
-        <div className="mb-4">
-          <h3 className="font-bold uppercase text-[10px] mb-2 border-b border-black inline-block">Chiusure Erogatori per Prodotto</h3>
-          <div className="grid grid-cols-5 gap-2">
-            {fuels.map((f, i) => {
+        <div className="mb-2 px-1 text-black">
+          <h3 className="font-black uppercase text-[10px] mb-1 border-b-[3px] border-black inline-block">Chiusure Erogatori per Prodotto</h3>
+          <div className="flex flex-row gap-1.5 w-full">
+            {['spb', 'gasolio', 'supreme', 'olio'].map((f, i) => {
               const dispensers = (data.fuels[f]?.dispensers || []).filter((d: any) => d.chiusura > 0);
-              if (f === 'totale_gasolio') return <div key={f} className="border border-black p-1 bg-gray-50 flex items-center justify-center text-[9px] font-bold">---</div>;
+              const label = ['BENZINA', 'GASOLIO', 'GASOLIO SUPREME', 'OLIO LUBR. KG.'][i];
               return (
-                <div key={f} className="border border-black p-1 min-h-[60px]">
-                  <div className="font-bold text-[8px] border-b border-black mb-1 text-center truncate">{labels[i]}</div>
-                  {dispensers.map((d: any, idx: number) => (
-                    <div key={idx} className="flex justify-between text-[9px] leading-tight">
-                      <span>{d.nome || `P${idx+1}`}:</span>
-                      <span className="font-mono">{d.chiusura}</span>
+                <div key={f} className="flex-1 border-2 border-black flex flex-col bg-white overflow-hidden">
+                  <div className="font-black text-[9px] border-b border-black text-center bg-gray-100 py-1 uppercase">{label}</div>
+                  <div className="px-1.5 py-1.5 flex-1">
+                    <div className="space-y-0.5">
+                      {dispensers.map((d: any, idx: number) => (
+                        <div key={idx} className="flex justify-between text-[10px] font-black leading-tight">
+                          <span>P{idx+1}:</span>
+                          <span className="font-mono tracking-tighter">{d.chiusura}</span>
+                        </div>
+                      ))}
+                      {dispensers.length === 0 && (
+                        <div className="flex items-center justify-center text-[9px] italic text-gray-300 font-medium py-6 text-center">
+                          Nessun dato
+                        </div>
+                      )}
                     </div>
-                  ))}
-                  {dispensers.length === 0 && <div className="text-[8px] text-center italic text-gray-400">Nessun dato</div>}
+                  </div>
                 </div>
               );
             })}
@@ -292,17 +319,15 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
         </div>
 
         {/* NOTE E FIRMA */}
-        <div className="grid grid-cols-2 gap-8 mt-4">
-          <div className="text-[10px] leading-tight">
-            <h4 className="font-bold underline mb-1 uppercase">Note esplicative</h4>
-            <textarea 
-              className="w-full h-24 border-none outline-none resize-none bg-transparent"
-              value={extra.note}
-              onChange={e => handleChangeExtra('note', e.target.value)}
-            />
+        <div className="flex flex-col mt-2 px-1">
+          <div className="w-full">
+            <h4 className="font-black underline mb-1 uppercase text-[10px]">Note esplicative</h4>
+            <div className="text-[9px] leading-tight font-bold whitespace-pre-wrap w-full">
+              {extra.note}
+            </div>
           </div>
-          <div className="text-center flex flex-col justify-end items-center">
-            <div className="border-t border-black w-64 pt-2 font-bold uppercase text-[11px]">
+          <div className="w-full text-center flex flex-col items-center pt-2 no-print">
+            <div className="border-t-2 border-black w-1/3 pt-2 font-black uppercase text-[11px] tracking-tight">
               TIMBRO E FIRMA DELLA DITTA
               <div className="h-16"></div>
             </div>
@@ -312,17 +337,22 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
 
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          @page { size: landscape; margin: 1cm; }
+          @page { size: A4 landscape; margin: 0.4cm; }
           .no-print { display: none !important; }
-          body { background: white; margin: 0; padding: 0; }
-          .fixed { position: static !important; overflow: visible !important; }
-          .max-w-5xl, .max-w-\[1120px\] { max-width: 100% !important; width: 100% !important; }
-          textarea { height: auto !important; }
-          input { border-bottom: 1px solid black !important; }
-          tr { page-break-inside: avoid; }
+          body { background: white !important; margin: 0 !important; padding: 0 !important; color: black !important; font-family: serif !important; font-size: 9px !important; }
+          * { color: black !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; border-color: black !important; }
+          .fixed { position: static !important; overflow: visible !important; height: auto !important; width: auto !important; }
+          .max-w-[1100px] { max-width: 100% !important; width: 100% !important; margin: 0 !important; transform: scale(0.9); transform-origin: top center; }
+          table { border: 1.5px solid black !important; border-collapse: collapse !important; width: 100% !important; }
+          td, th { border: 1px solid black !important; padding: 2px 4px !important; }
+          input { display: none !important; }
+          h1 { font-size: 16px !important; }
+          .text-xl { font-size: 16px !important; }
+          .text-[11px] { font-size: 9px !important; }
+          .text-[10px] { font-size: 8px !important; }
+          .text-[9px] { font-size: 7px !important; }
         }
       `}} />
     </div>
-
   );
 }

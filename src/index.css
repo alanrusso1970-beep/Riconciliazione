@@ -6,15 +6,42 @@
 
 @media print {
   @page { size: A4 landscape; margin: 10mm; }
-  body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body { 
+    background: white !important; 
+    -webkit-print-color-adjust: exact !important; 
+    print-color-adjust: exact !important; 
+  }
+  
   .no-print { display: none !important; }
-  .page-break { page-break-after: always; break-after: page; }
-  * { font-size: 11px !important; line-height: 1.2 !important; font-family: sans-serif; }
-  .print-show { display: block !important; border-bottom: 0.5px solid #ccc; min-height: 14px; }
-  .print-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 4px !important; width: 100% !important; }
-  .print-section { break-inside: avoid !important; }
-  .shadow-lg, .shadow-xl, .shadow-2xl, .shadow-sm { box-shadow: none !important; }
-  .rounded-3xl, .rounded-2xl, .rounded-xl { border-radius: 0 !important; border: 0.5px solid #ccc !important; }
+  
+  /* Reset layout for print */
+  .max-w-7xl { max-width: none !important; width: 100% !important; margin: 0 !important; }
+  .grid { display: block !important; width: 100% !important; }
+  
+  /* Page Breaks */
+  .page-break-1 { page-break-after: always !important; break-after: page !important; }
+  .page-break-2 { page-break-before: always !important; break-before: page !important; page-break-after: always !important; break-after: page !important; }
+  .page-break-3 { page-break-before: always !important; break-before: page !important; }
+  
+  /* Section Styling */
+  .bg-white { border: none !important; box-shadow: none !important; padding: 0 !important; margin-bottom: 20px !important; }
+  
+  /* Typography */
+  * { font-size: 11px !important; line-height: 1.2 !important; }
+  h2 { font-size: 16px !important; border-bottom: 1px solid #eee !important; padding-bottom: 5px !important; margin-top: 15px !important; }
+  
+  /* Tables */
+  table { width: 100% !important; border-collapse: collapse !important; }
+  th, td { border: 1px solid #ddd !important; padding: 6px 8px !important; font-size: 10px !important; }
+  th { background-color: #f8fafc !important; }
+  
+  /* Specific adjustments for Page 3 (Prospetto) to fill the page */
+  .page-break-3 table { font-size: 12px !important; }
+  .page-break-3 td, .page-break-3 th { padding: 10px 8px !important; }
+  
+  .print-show { display: block !important; border-bottom: 1px solid #eee; min-height: 14px; font-weight: bold; }
+  .print-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 4px !important; }
+  input { display: none !important; }
 }
 
 @keyframes loadingBar {

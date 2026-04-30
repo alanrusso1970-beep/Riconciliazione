@@ -204,10 +204,13 @@ export default function App() {
                 gasolio: getFuelDiff('gasolio', rowData),
                 supreme: getFuelDiff('supreme', rowData),
                 gpl: getFuelDiff('gpl', rowData),
-                timestamp: i
+                timestamp: i,
+                fullData: rowData
               });
             } catch (e) { }
           }
+          // Ordiniamo per data decrescente (più recente prima)
+          parsedHistory.sort((a, b) => b.date.localeCompare(a.date));
           setHistoryData(parsedHistory);
 
           // Se non abbiamo dati salvati correnti nel GAS (savedData), ma abbiamo trovato dati nello storico,
@@ -637,7 +640,7 @@ export default function App() {
       )}
 
       {/* HEADER & CONTROLLI */}
-      <div className="max-w-7xl mx-auto space-y-5">
+      <div className={`max-w-7xl mx-auto space-y-5 ${showUTFForm ? 'print:hidden' : ''}`}>
         <div className="bg-slate-800 text-white p-4 rounded-2xl flex justify-between items-center no-print shadow-[0_8px_30px_rgb(0,0,0,0.12)] animate-fade-in-up">
           <h1 className="font-bold uppercase tracking-tight flex items-center gap-3">
             <div className="bg-white/20 p-1.5 rounded-lg shadow-inner"><Printer size={16} /></div>
@@ -662,14 +665,6 @@ export default function App() {
             <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-3 md:px-4 py-2 rounded-xl font-bold text-[10px] md:text-sm transition-all shadow-lg shadow-blue-600/30 hover:shadow-blue-600/50 hover:-translate-y-0.5 active:scale-95"><Save size={18}/> {saving ? 'SALVATAGGIO...' : 'SALVA'}</button>
           </div>
         </div>
-
-        {/* UTF FORM VIEW */}
-        {showUTFForm && (
-          <UTFForm 
-            data={data} 
-            onClose={() => setShowUTFForm(false)} 
-          />
-        )}
 
         {/* ANAGRAFICA */}
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 space-y-4 animate-fade-in-up delay-100">
@@ -714,17 +709,107 @@ export default function App() {
                 <span className="hidden-screen print-show font-mono font-bold text-slate-700 text-[10px]">{data.station.data.split('-').reverse().join('/')} - {data.station.ora}</span>
               </div>
             </div>
-            <div className="flex flex-col">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Storico Trovato</label>
-              <div className="font-bold text-emerald-600 mt-1 border-b pb-1">
-                {historyData.length} {historyData.length === 1 ? 'riga' : 'righe'}
+            <div className="flex flex-col md:col-span-2 no-print">
+              <div className="flex justify-between items-end mb-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Storico Trovato ({historyData.length})
+                </label>
+                <button 
+                  onClick={() => {
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow) {
+                      const html = `
+                        <html>
+                          <head>
+                            <title>Riepilogo Storico - ${data.station.codCliente}</title>
+                            <style>
+                              body { font-family: sans-serif; padding: 20px; }
+                              h1 { font-size: 18px; margin-bottom: 10px; }
+                              h2 { font-size: 14px; color: #666; margin-bottom: 20px; }
+                              table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                              th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 12px; }
+                              th { background-color: #f4f4f4; }
+                              .text-right { text-align: right; }
+                              .text-red { color: #d00; }
+                              .font-bold { font-weight: bold; }
+                            </style>
+                          </head>
+                          <body>
+                            <h1>Riepilogo Storico Riconciliazioni</h1>
+                            <h2>Punto Vendita: ${data.station.codCliente} - ${data.station.gestore}</h2>
+                            <p>Località: ${data.station.comune} ${data.station.localita}</p>
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Data</th>
+                                  <th class="text-right">Benzina (Spb)</th>
+                                  <th class="text-right">Gasolio</th>
+                                  <th class="text-right">Supreme</th>
+                                  <th class="text-right">GPL</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                ${historyData.map(h => `
+                                  <tr>
+                                    <td class="font-bold">${h.displayDate}</td>
+                                    <td class="text-right ${h.spb < 0 ? 'text-red' : ''}">${h.spb > 0 ? '+' : ''}${formatNum(h.spb)}</td>
+                                    <td class="text-right ${h.gasolio < 0 ? 'text-red' : ''}">${h.gasolio > 0 ? '+' : ''}${formatNum(h.gasolio)}</td>
+                                    <td class="text-right ${h.supreme < 0 ? 'text-red' : ''}">${h.supreme > 0 ? '+' : ''}${formatNum(h.supreme)}</td>
+                                    <td class="text-right ${h.gpl < 0 ? 'text-red' : ''}">${h.gpl > 0 ? '+' : ''}${formatNum(h.gpl)}</td>
+                                  </tr>
+                                `).join('')}
+                              </tbody>
+                            </table>
+                            <p style="margin-top: 30px; font-size: 10px; color: #999;">Documento generato il ${new Date().toLocaleDateString('it-IT')} alle ${new Date().toLocaleTimeString('it-IT')}</p>
+                          </body>
+                        </html>
+                      `;
+                      printWindow.document.write(html);
+                      printWindow.document.close();
+                      setTimeout(() => {
+                        printWindow.print();
+                        printWindow.close();
+                      }, 500);
+                    }
+                  }} 
+                  className="no-print text-[10px] font-black text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-full transition-all border border-blue-100 hover:border-blue-200"
+                >
+                  <Printer size={12}/> STAMPA TUTTE
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {historyData.length === 0 ? (
+                  <span className="text-[10px] text-slate-400 italic">Nessuno storico disponibile</span>
+                ) : (
+                  historyData.slice(0, 10).map((h, i) => (
+                    <button
+                      key={i}
+                      title={`Carica riconciliazione del ${h.displayDate}`}
+                      onClick={() => {
+                        setData(h.fullData);
+                        toast.success(`Caricata riconciliazione del ${h.displayDate}`, { icon: '📂' });
+                      }}
+                      className="no-print text-[10px] font-bold px-2 py-1 bg-white text-emerald-700 border border-emerald-100 rounded-lg hover:bg-emerald-50 hover:border-emerald-300 transition-all active:scale-95 shadow-sm"
+                    >
+                      {h.displayDate}
+                    </button>
+                  ))
+                )}
+                {historyData.length > 10 && (
+                  <button 
+                    onClick={() => setShowHistory(true)}
+                    className="no-print text-[10px] font-medium text-slate-400 hover:text-slate-600"
+                  >
+                    +{historyData.length - 10} altre...
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
         {/* TOTALIZZATORI */}
-        <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] page-break transition-all duration-500 hover:-translate-y-1 animate-fade-in-up delay-200">
+        <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-500 hover:-translate-y-1 animate-fade-in-up delay-200 page-break-1">
           <h2 className="text-[11px] font-black mb-6 text-slate-800 border-b border-slate-100 pb-3 uppercase tracking-[0.15em] flex items-center gap-3">
             <div className="w-2.5 h-2.5 bg-slate-800 rounded-full shadow-sm animate-pulse" />
             1. Rilevazione Contatori Erogatori
@@ -737,7 +822,7 @@ export default function App() {
 
         {/* GIACENZE E CALCOLI */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in-up delay-300">
-          <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-500 hover:-translate-y-1">
+          <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-500 hover:-translate-y-1 page-break-2">
             <h2 className="text-[11px] font-black mb-6 text-slate-800 border-b border-slate-100 pb-3 uppercase tracking-[0.15em] flex items-center gap-3">
               <div className="w-2.5 h-2.5 bg-slate-800 rounded-full shadow-sm animate-pulse" />
               2. Giacenze Fisiche (Cisterne)
@@ -749,7 +834,7 @@ export default function App() {
               {renderCisterne('gpl')}
             </div>
           </div>
-          <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] w-full transition-all duration-500 hover:-translate-y-1">
+          <div className="bg-white p-6 border border-slate-100 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] w-full transition-all duration-500 hover:-translate-y-1 page-break-3">
             <h2 className="text-[11px] font-black mb-6 text-slate-800 border-b border-slate-100 pb-3 uppercase tracking-[0.15em] text-center bg-slate-50 rounded-xl p-2">
               3. Prospetto di Riconciliazione Movimenti e Cali
             </h2>
@@ -757,6 +842,14 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* UTF FORM VIEW - MOVING OUTSIDE HIDE-ON-PRINT DIV */}
+      {showUTFForm && (
+        <UTFForm 
+          data={data} 
+          onClose={() => setShowUTFForm(false)} 
+        />
+      )}
     </div>
   );
 }
