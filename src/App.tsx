@@ -337,7 +337,7 @@ export default function App() {
       { l: "c) CALI VIAGGI", v: calc.caliViaggio, k: "caliViaggio" as const, red: true },
       { l: "d) CALO TECNICO", v: calc.caliTecnici, k: "caliTecnici" as const, red: true },
       { l: "f) TOTALE SCARICO", v: Math.round(totScarico), bold: true, red: true, bg: 'bg-red-50' },
-      { l: "GIAC. CONTABILE", v: Math.round(giacContabile), bold: true },
+      { l: "GIAC. CONTABILE", v: Math.round(giacContabile), bold: true, red: Math.round(giacContabile) < 0 },
       { l: "GIAC. EFFETTIVA", v: giacEffettiva, bold: true },
       { l: "ECCED. (+) / CALO (-)", v: Math.round(diff), bold: true, isDiff: true, red: diff < 0, bg: diff < 0 ? 'bg-red-100' : 'bg-emerald-100' },
       { l: "CALO ANNUO CONSENTITO", v: Math.round(caloAnnuo), bold: true, suffix: ' lt' },
@@ -484,10 +484,17 @@ export default function App() {
                   let displayVal = formatNum(Math.abs(cell.v));
                   if (cell.isDiff) {
                     displayVal = cell.v === 0 ? '0' : (cell.v > 0 ? '+' : '-') + ' ' + displayVal;
+                  } else if (cell.v < 0) {
+                    displayVal = '-' + displayVal;
                   }
 
+                  const isGiacContabileNeg = row.l === 'GIAC. CONTABILE' && cell.v < 0;
+
                   return (
-                    <td key={idx} className={`border px-1.5 py-1 text-right ${cell.red ? 'text-red-600' : ''} ${shouldHideInPrint(fuels[idx]) ? 'print:hidden' : ''}`}>
+                    <td 
+                      key={idx} 
+                      className={`border px-1.5 py-1 text-right ${cell.red ? 'text-red-600 print:text-red-600' : ''} ${isGiacContabileNeg ? 'font-bold' : ''} ${shouldHideInPrint(fuels[idx]) ? 'print:hidden' : ''}`}
+                    >
                       <div className="flex justify-end items-center gap-1">
                         {cell.k && (
                           <input type="number" 
@@ -496,7 +503,7 @@ export default function App() {
                             value={cell.v} 
                             onChange={e => updateCalcolo(fuels[idx], cell.k!, parseInt(e.target.value) || 0)} />
                         )}
-                        <span className={cell.k ? 'hidden-screen print-show font-mono' : 'font-mono'}>
+                        <span className={`${cell.k ? 'hidden-screen print-show font-mono' : 'font-mono'} ${cell.red ? 'text-red-600 print:text-red-600' : ''} ${isGiacContabileNeg ? 'font-bold' : ''}`}>
                           {displayVal}
                         </span>
                       </div>
@@ -649,7 +656,7 @@ export default function App() {
         <div className="bg-slate-800 text-white p-4 rounded-2xl flex justify-between items-center no-print shadow-[0_8px_30px_rgb(0,0,0,0.12)] animate-fade-in-up">
           <h1 className="font-bold uppercase tracking-tight flex items-center gap-3">
             <div className="bg-white/20 p-1.5 rounded-lg shadow-inner"><Printer size={16} /></div>
-            Registro Carburanti v2.0
+            Registro Carburanti v 3.0
           </h1>
           <div className="flex flex-wrap gap-2 md:gap-3 justify-end">
             <button 

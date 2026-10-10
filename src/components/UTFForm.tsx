@@ -11,7 +11,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
   const getInitialTableData = (startLetter: string, empty: boolean = false) => {
     const isSecondTable = startLetter === 'j';
     const rowIds = isSecondTable ? ['j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 'diff'] : ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'diff'];
-    const fuels: ('spb' | 'gasolio' | 'supreme' | 'totale_gasolio' | 'olio')[] = ['spb', 'gasolio', 'supreme', 'totale_gasolio', 'olio'];
+    const fuels: ('spb' | 'gasolio' | 'supreme' | 'totale_gasolio' | 'gpl' | 'olio')[] = ['spb', 'gasolio', 'supreme', 'totale_gasolio', 'gpl', 'olio'];
     
     const initialValues: Record<string, Record<string, number>> = {};
 
@@ -25,20 +25,23 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
       return initialValues;
     }
 
-    const calculateForType = (type: 'spb' | 'gasolio' | 'supreme') => {
-      const fl = data.fuels[type];
-      const calc = data.calcoli[type];
-      const erogato = fl.dispensers.reduce((sum: number, disp: any) => sum + Math.max(0, disp.chiusura - disp.apertura), 0);
-      const giacEffettiva = fl.cisterne.reduce((s: number, c: any) => s + c.giacenza, 0);
-      const introdotto = calc.carico;
-      const eccedenze = calc.eccedRegistrate + calc.scattiVuoto + calc.eccedenzeTrasporto;
-      const totCarico = calc.rimananzeIniziali + introdotto + eccedenze;
-      const cali = calc.caliGiaRegistrati + calc.caliViaggio + calc.caliTecnici;
+    const calculateForType = (type: 'spb' | 'gasolio' | 'supreme' | 'gpl') => {
+      const fl = data.fuels?.[type];
+      const calc = data.calcoli?.[type];
+      if (!fl || !calc) {
+        return { rim: 0, int: 0, ecc: 0, totC: 0, ero: 0, cal: 0, totS: 0, giaC: 0, giaE: 0, diff: 0 };
+      }
+      const erogato = (fl.dispensers || []).reduce((sum: number, disp: any) => sum + Math.max(0, (disp.chiusura || 0) - (disp.apertura || 0)), 0);
+      const giacEffettiva = (fl.cisterne || []).reduce((s: number, c: any) => s + (c.giacenza || 0), 0);
+      const introdotto = calc.carico || 0;
+      const eccedenze = (calc.eccedRegistrate || 0) + (calc.scattiVuoto || 0) + (calc.eccedenzeTrasporto || 0);
+      const totCarico = (calc.rimananzeIniziali || 0) + introdotto + eccedenze;
+      const cali = (calc.caliGiaRegistrati || 0) + (calc.caliViaggio || 0) + (calc.caliTecnici || 0);
       const totScarico = erogato + cali;
       const giacContabile = totCarico - totScarico;
       
       return {
-        rim: calc.rimananzeIniziali,
+        rim: calc.rimananzeIniziali || 0,
         int: introdotto,
         ecc: eccedenze,
         totC: totCarico,
@@ -54,6 +57,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
     const g = calculateForType('gasolio');
     const s = calculateForType('supreme');
     const b = calculateForType('spb');
+    const gpl = calculateForType('gpl');
     const t = {
       rim: g.rim + s.rim,
       int: g.int + s.int,
@@ -71,7 +75,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
       initialValues[rowId] = {};
       fuels.forEach(f => {
         let val = 0;
-        const source = f === 'spb' ? b : (f === 'gasolio' ? g : (f === 'supreme' ? s : (f === 'totale_gasolio' ? t : null)));
+        const source = f === 'spb' ? b : (f === 'gasolio' ? g : (f === 'supreme' ? s : (f === 'totale_gasolio' ? t : (f === 'gpl' ? gpl : null))));
         
         if (source) {
           if (rowId === 'a' || rowId === 'j') val = source.rim;
@@ -123,8 +127,8 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
     }
   };
 
-  const fuels: ('spb' | 'gasolio' | 'supreme' | 'totale_gasolio' | 'olio')[] = ['spb', 'gasolio', 'supreme', 'totale_gasolio', 'olio'];
-  const labels = ['BENZINA', 'GASOLIO', 'GASOLIO SUPREME', 'TOTALE GASOLIO', 'OLIO LUBR. Kg.'];
+  const fuels: ('spb' | 'gasolio' | 'supreme' | 'totale_gasolio' | 'gpl' | 'olio')[] = ['spb', 'gasolio', 'supreme', 'totale_gasolio', 'gpl', 'olio'];
+  const labels = ['BENZINA', 'GASOLIO', 'GASOLIO SUPREME', 'TOTALE GASOLIO', 'GPL', 'OLIO LUBR. Kg.'];
   
   const renderTableRows = (tableNum: 1 | 2) => {
     const isTable2 = tableNum === 2;
@@ -159,7 +163,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
           ({row.id}) {row.l}
         </td>
         {fuels.map((f) => {
-          const cellVal = currentTableData[row.id][f];
+          const cellVal = currentTableData[row.id]?.[f] ?? 0;
           const isOlio = f === 'olio';
           const displayVal = isOlio && cellVal !== 0 ? cellVal.toFixed(2) : (cellVal === 0 ? '' : cellVal);
           return (
@@ -168,7 +172,7 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
                 type="number" 
                 step={isOlio ? '0.01' : '1'}
                 className="w-full h-full p-0.5 text-right border-none outline-none bg-transparent font-black no-print"
-                value={cellVal === 0 ? '' : (isOlio ? cellVal : cellVal)} 
+                value={cellVal === 0 ? '' : cellVal} 
                 onChange={e => handleChangeTable(tableNum, row.id, f, e.target.value)}
               />
               <span className="hidden print:block pr-1 font-black text-black">
@@ -300,17 +304,24 @@ export default function UTFForm({ data, onClose }: UTFFormProps) {
         <div className="mb-2 px-1 text-black">
           <h3 className="font-black uppercase text-[10px] mb-1 border-b-[3px] border-black inline-block">Chiusure Erogatori per Prodotto</h3>
           <div className="flex flex-row gap-1.5 w-full">
-            {['spb', 'gasolio', 'supreme'].map((f, i) => {
-              const dispensers = (data.fuels[f]?.dispensers || []).filter((d: any) => d.chiusura > 0);
-              const label = ['BENZINA', 'GASOLIO', 'GASOLIO SUPREME'][i];
+            {[
+              { key: 'spb', label: 'BENZINA' },
+              { key: 'gasolio', label: 'GASOLIO' },
+              { key: 'supreme', label: 'GASOLIO SUPREME' },
+              { key: 'gpl', label: 'GPL' }
+            ].map(({ key: f, label }) => {
+              const rawDispensers = data.fuels?.[f]?.dispensers || [];
+              const dispensers = rawDispensers
+                .map((d: any, origIdx: number) => ({ ...d, origIdx }))
+                .filter((d: any) => d.chiusura > 0);
               return (
                 <div key={f} className="flex-1 border-2 border-black flex flex-col bg-white overflow-hidden">
                   <div className="font-black text-[9px] border-b border-black text-center bg-gray-100 py-1 uppercase">{label}</div>
                   <div className="px-1.5 py-1.5 flex-1">
                     <div className="space-y-0.5">
-                      {dispensers.map((d: any, idx: number) => (
-                        <div key={idx} className="flex justify-between text-[10px] font-black leading-tight">
-                          <span>P{idx+1}:</span>
+                      {dispensers.map((d: any) => (
+                        <div key={d.origIdx} className="flex justify-between text-[10px] font-black leading-tight">
+                          <span>P{d.origIdx + 1}:</span>
                           <span className="font-mono tracking-tighter">{d.chiusura}</span>
                         </div>
                       ))}
