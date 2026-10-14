@@ -21,6 +21,9 @@ GAS_URL = "https://script.google.com/macros/s/AKfycbwaxTXHi4RXmgdTWMMWPnABqnxroW
 STATION_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/19dKi3T8Fhd8KdAFUSjEdLgKJzSJrsCIG/export?format=csv&gid=1663329432"
 # File Riconciliazioni (GiacenzeStore) - Usato indirettamente tramite GAS
 RECONCILIATION_SS_ID = "13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE"
+# File Giacenze_Archive - Foglio GiacenzeStore (codici impianto e conteggio)
+GIACENZE_ARCHIVE_GID = "0"  # gid del foglio GiacenzeStore - aggiornare se necessario
+GIACENZE_ARCHIVE_SS_ID = "13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE"  # stesso file, sheet GiacenzeStore
 PORT = 8787
 
 # Fix SSL per macOS
@@ -49,6 +52,7 @@ class SimpleCache:
 
 STATION_CACHE = SimpleCache(ttl=600)  # 10 minuti
 HISTORY_CACHE = SimpleCache(ttl=300)  # 5 minuti
+GIACENZE_STORE_CACHE = SimpleCache(ttl=120)  # 2 minuti
 
 
 class ProxyHandler(http.server.SimpleHTTPRequestHandler):
@@ -150,6 +154,70 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 print(f"[Proxy] CSV Station Error: {str(e)}")
                 self.send_error_json(f"Errore: {str(e)}")
             return
+
+        if qs.get('action') == ['get_giacenze_store']:
+            print("[Proxy] Fetching GiacenzeStore data")
+            try:
+                cached = GIACENZE_STORE_CACHE.get()
+                if not cached:
+                    # Legge l'archivio giacenze via GAS (stesso foglio GiacenzeStore)
+                    raw_csv = HISTORY_CACHE.get()
+                    if not raw_csv:
+                        try:
+                            gas_url = f"{GAS_URL}?action=get_history_csv"
+                            req = urllib.request.Request(gas_url, headers={'User-Agent': 'Mozilla/5.0'})
+                            with urllib.request.urlopen(req, context=ssl_context, timeout=30) as resp:
+                                raw_csv = resp.read().decode('utf-8', errors='ignore')
+                            HISTORY_CACHE.set(raw_csv)
+                        except Exception as gas_err:
+                            print(f"[Proxy] GiacenzeStore GAS error: {gas_err}, trying direct CSV fallback...")
+                            gs_url = (
+                                f"https://docs.google.com/spreadsheets/d/{GIACENZE_ARCHIVE_SS_ID}"
+                                f"/export?format=csv&sheet=GiacenzeStore&_cb={os.urandom(4).hex()}"
+                            )
+                            req = urllib.request.Request(gs_url, headers={'User-Agent': 'Mozilla/5.0'})
+                            with urllib.request.urlopen(req, context=ssl_context, timeout=30) as resp:
+                                raw_csv = resp.read().decode('utf-8-sig', errors='replace')
+
+                    reader = csv.reader(io.StringIO(raw_csv))
+                    rows = list(reader)
+
+                    # La prima riga può essere header ('PBL' o intestazione)
+                    data_rows = rows[1:] if rows and rows[0] and (rows[0][0].strip().upper() == 'PBL' or not rows[0][0].strip().lstrip('0').isdigit()) else rows
+
+                    # Codici univoci dalla prima colonna (colonna 0 = codice impianto)
+                    seen = set()
+                    unique_codes = []
+                    total_rows = 0
+                    for row in data_rows:
+                        if not row or not row[0].strip():
+                            continue
+                        total_rows += 1
+                        cod = row[0].strip()
+                        if cod not in seen:
+                            seen.add(cod)
+                            unique_codes.append(cod)
+
+                    # Ordinamento numerico/alfanumerico naturale
+                    unique_codes.sort(key=lambda x: (0, int(x)) if x.isdigit() else (1, x.lower()))
+                    result_obj = {'success': True, 'codici': unique_codes, 'totale': total_rows}
+                    cached = json.dumps(result_obj)
+                    GIACENZE_STORE_CACHE.set(cached)
+                    print(f"[Proxy] GiacenzeStore: {len(unique_codes)} codici univoci, {total_rows} righe totali")
+                else:
+                    print("[Proxy] GiacenzeStore loaded from Cache")
+
+                result = cached.encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(result)
+            except Exception as e:
+                print(f"[Proxy] GiacenzeStore Error: {str(e)}")
+                self.send_error_json(f"Errore GiacenzeStore: {str(e)}")
+            return
+
 
         if qs.get('action') == ['get_history_csv']:
             pbl = (qs.get('pbl') or [''])[0].strip()

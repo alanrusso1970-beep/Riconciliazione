@@ -201,6 +201,89 @@ export async function onRequest(context) {
     }
   }
 
+  // --- AZIONE: GIACENZE STORE - codici impianto univoci e totale righe ---
+  if (params.get('action') === 'get_giacenze_store') {
+    const GIACENZE_SS_ID = '13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE';
+    const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbwaxTXHi4RXmgdTWMMWPnABqnxroWRbYNv6BsWWz73bvxeV_g56R7_yiZFbdl_WjOLa/exec";
+    try {
+      const cacheKey = new Request(new URL(request.url).origin + '/api/static_giacenze_store');
+      const cache = caches.default;
+      let cachedResponse = await cache.match(cacheKey).catch(() => null);
+      let resultText;
+
+      if (cachedResponse) {
+        resultText = await cachedResponse.text();
+      } else {
+        let csvText = '';
+        try {
+          const gasRes = await fetch(`${GAS_URL}?action=get_history_csv`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 FuelCare-Proxy/CloudflarePages' },
+            redirect: 'follow'
+          });
+          if (gasRes.ok) {
+            csvText = await gasRes.text();
+          }
+        } catch (err) {
+          console.warn('[Pages] GAS get_history_csv failed, trying fallback', err);
+        }
+
+        if (!csvText) {
+          const csvUrl = `https://docs.google.com/spreadsheets/d/${GIACENZE_SS_ID}/export?format=csv&sheet=GiacenzeStore`;
+          const csvRes = await fetch(csvUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 FuelCare-Proxy/CloudflarePages' },
+            redirect: 'follow'
+          });
+          if (!csvRes.ok) throw new Error(`GS CSV returned status ${csvRes.status}`);
+          csvText = await csvRes.text();
+        }
+
+        const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+        const hasHeader = lines.length > 0 && (lines[0].toUpperCase().startsWith('PBL') || !/^\d+/.test(lines[0]));
+        const dataLines = hasHeader ? lines.slice(1) : lines;
+        const seen = new Set();
+        const uniqueCodes = [];
+        let totalRows = 0;
+        for (const line of dataLines) {
+          if (!line.trim()) continue;
+          const firstComma = line.indexOf(',');
+          const cod = (firstComma === -1 ? line : line.substring(0, firstComma)).replace(/^"|"$/g, '').trim();
+          if (!cod) continue;
+          totalRows++;
+          if (!seen.has(cod)) {
+            seen.add(cod);
+            uniqueCodes.push(cod);
+          }
+        }
+        uniqueCodes.sort((a, b) => {
+          const numA = parseInt(a, 10);
+          const numB = parseInt(b, 10);
+          if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+          return a.localeCompare(b);
+        });
+        const resultObj = { success: true, codici: uniqueCodes, totale: totalRows };
+        resultText = JSON.stringify(resultObj);
+
+        const cacheResponse = new Response(resultText, {
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'public, max-age=120'
+          }
+        });
+        context.waitUntil(cache.put(cacheKey, cacheResponse).catch(() => null));
+      }
+
+      return new Response(resultText, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({ success: false, message: error.message }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+  }
+
   // --- AZIONE: PROXY VERSO GOOGLE APPS SCRIPT ---
   const action = params.get('action') || (url.pathname.endsWith('/save') ? 'save_reconciliation' : null);
   

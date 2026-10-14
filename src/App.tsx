@@ -76,6 +76,13 @@ export default function App() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [historyData, setHistoryData] = useState<any[]>([]);
 
+  // MatchCode modal
+  const [showMatchCod, setShowMatchCod] = useState(false);
+  const [matchCodList, setMatchCodList] = useState<string[]>([]);
+  const [matchCodSearch, setMatchCodSearch] = useState('');
+  const [giacenzeTotali, setGiacenzeTotali] = useState<number | null>(null);
+  const [loadingGiacenze, setLoadingGiacenze] = useState(false);
+
   // UTF Form
   const [showUTFForm, setShowUTFForm] = useState(false);
 
@@ -85,6 +92,7 @@ export default function App() {
     if (passInput === 'toil') {
       setIsLogged(true);
       toast.success('Accesso effettuato con successo!');
+      fetchGiacenzeStore();
     } else {
       setShowError(true);
       setPassInput('');
@@ -93,8 +101,30 @@ export default function App() {
     }
   };
 
+  // --- FETCH GIACENZE STORE ---
+  const fetchGiacenzeStore = async () => {
+    setLoadingGiacenze(true);
+    try {
+      const baseUrl = window.location.origin;
+      const res = await fetch(`${baseUrl}/api/?action=get_giacenze_store&_cb=${Date.now()}`);
+      const json = await res.json();
+      if (json.success) {
+        setMatchCodList(json.codici || []);
+        setGiacenzeTotali(json.totale ?? null);
+      }
+    } catch (e) {
+      console.warn('GiacenzeStore non disponibile:', e);
+    } finally {
+      setLoadingGiacenze(false);
+    }
+  };
+
   // --- EFFETTI ---
-  // Caricamento storico rimosso da useEffect perché gestito da loadStation (Sorgente: FILE)
+  useEffect(() => {
+    if (isLogged) {
+      fetchGiacenzeStore();
+    }
+  }, [isLogged]);
 
   // --- HELPER DIFFERENZA ---
   const getFuelDiff = (f: FuelType, currentState: AppState) => {
@@ -109,8 +139,8 @@ export default function App() {
   };
 
   // --- AZIONI ---
-  const loadStation = async () => {
-    const currentPbl = data.station.codCliente || '108208';
+  const loadStation = async (overridePbl?: string) => {
+    const currentPbl = overridePbl || data.station.codCliente || '108208';
     setLoading(true);
     try {
       const baseUrl = window.location.origin;
@@ -536,9 +566,6 @@ export default function App() {
               <h1 className="text-5xl font-black text-white tracking-tight leading-tight">
                 Riconciliazione <br/><span className="text-blue-400 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">Carburanti</span>
               </h1>
-              <p className="mt-6 text-slate-300 text-lg leading-relaxed max-w-md">
-                Piattaforma avanzata per la gestione contabile, rilevazione giacenze e quadratura fiscale per gli impianti di distribuzione carburanti.
-              </p>
             </div>
             <div className="mt-4 rounded-2xl overflow-hidden border border-white/10 shadow-2xl animate-fade-in-up delay-300 group">
               <img 
@@ -651,12 +678,97 @@ export default function App() {
         </div>
       )}
 
+      {/* MATCHCOD MODAL */}
+      {showMatchCod && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4 no-print">
+          <div className="bg-white rounded-[2rem] p-8 shadow-2xl w-full max-w-lg flex flex-col gap-5 relative animate-fade-in-up">
+            <button
+              onClick={() => setShowMatchCod(false)}
+              className="absolute top-5 right-5 p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors"
+            >
+              <X size={20} className="text-slate-600" />
+            </button>
+
+            <div>
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-3">
+                <Search className="text-blue-600" size={24} />
+                Seleziona Impianto
+              </h2>
+              <p className="text-slate-500 text-sm mt-1">
+                Codici impianto registrati in GiacenzeStore
+                {giacenzeTotali !== null && (
+                  <span className="ml-1 font-semibold text-blue-700">({giacenzeTotali.toLocaleString('it-IT')} righe totali)</span>
+                )}
+              </p>
+            </div>
+
+            {/* Barra di ricerca */}
+            <input
+              autoFocus
+              type="text"
+              placeholder="Filtra codice impianto..."
+              value={matchCodSearch}
+              onChange={e => setMatchCodSearch(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-slate-50"
+            />
+
+            {/* Lista codici */}
+            <div className="overflow-y-auto max-h-72 flex flex-col gap-1.5 pr-1">
+              {loadingGiacenze && matchCodList.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-sm flex flex-col items-center gap-2">
+                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  Caricamento codici da GiacenzeStore...
+                </div>
+              ) : matchCodList.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  Nessun codice impianto trovato in archivio.<br/>
+                  <button
+                    onClick={() => fetchGiacenzeStore()}
+                    className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline font-medium"
+                  >
+                    Ricarica archivio
+                  </button>
+                </div>
+              ) : (
+                matchCodList
+                  .filter(cod => cod.toLowerCase().includes(matchCodSearch.toLowerCase()))
+                  .map((cod, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        updateStation('codCliente', cod);
+                        setShowMatchCod(false);
+                        loadStation(cod);
+                      }}
+                      className="flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 border border-slate-100 rounded-xl text-sm font-bold text-slate-700 transition-all active:scale-95 text-left group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-blue-400 group-hover:bg-blue-600 transition-colors flex-shrink-0" />
+                        <span className="font-mono">{cod}</span>
+                      </div>
+                      <span className="text-xs text-slate-400 group-hover:text-blue-600 font-normal">Seleziona &rarr;</span>
+                    </button>
+                  ))
+              )}
+              {matchCodList.filter(cod => cod.toLowerCase().includes(matchCodSearch.toLowerCase())).length === 0 && matchCodList.length > 0 && (
+                <div className="text-center py-6 text-slate-400 text-sm">Nessun risultato per "{matchCodSearch}"</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER & CONTROLLI */}
       <div className={`max-w-7xl mx-auto space-y-5 ${showUTFForm ? 'print:hidden' : ''}`}>
         <div className="bg-slate-800 text-white p-4 rounded-2xl flex justify-between items-center no-print shadow-[0_8px_30px_rgb(0,0,0,0.12)] animate-fade-in-up">
-          <h1 className="font-bold uppercase tracking-tight flex items-center gap-3">
+          <h1 className="font-bold uppercase tracking-tight flex items-center gap-3 flex-wrap">
             <div className="bg-white/20 p-1.5 rounded-lg shadow-inner"><Printer size={16} /></div>
-            Registro Carburanti v 3.0
+            <span>Registro Carburanti v 3.0</span>
+            {giacenzeTotali !== null && (
+              <span className="text-[10px] md:text-xs font-medium text-slate-300 bg-white/10 px-2.5 py-0.5 rounded-full border border-white/10 tracking-normal normal-case">
+                {giacenzeTotali.toLocaleString('it-IT')} giacenze
+              </span>
+            )}
           </h1>
           <div className="flex flex-wrap gap-2 md:gap-3 justify-end">
             <button 
@@ -691,7 +803,25 @@ export default function App() {
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Codice Impianto</label>
               <div className="flex gap-2">
                 <input className="flex-1 font-bold text-blue-900 border-b outline-none no-print" value={data.station.codCliente} onChange={e => updateStation('codCliente', e.target.value)} />
-                <button onClick={loadStation} className="no-print text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors"><Search size={18}/></button>
+                <button
+                  type="button"
+                  title={!data.station.codCliente.trim() ? "Visualizza tutti i codici impianto" : "Carica impianto"}
+                  onClick={() => {
+                    if (!data.station.codCliente.trim()) {
+                      // Se vuoto, assicurati che la lista sia richiesta e apri MatchCod
+                      if (matchCodList.length === 0) {
+                        fetchGiacenzeStore();
+                      }
+                      setMatchCodSearch('');
+                      setShowMatchCod(true);
+                    } else {
+                      loadStation();
+                    }
+                  }}
+                  className="no-print text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors"
+                >
+                  <Search size={18}/>
+                </button>
                 <span className="hidden-screen print-show font-bold">{data.station.codCliente}</span>
               </div>
             </div>

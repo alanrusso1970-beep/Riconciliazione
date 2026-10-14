@@ -212,8 +212,96 @@ export default {
           });
         }
       }
+      // 3. GiacenzeStore - codici impianto univoci e totale righe
+      if (url.searchParams.get('action') === 'get_giacenze_store') {
+        const GIACENZE_SS_ID = '13GXy6HsjW37Z2-wI4INjXCpgp_neEVqxoLVqO1PwtPE';
+        const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbwaxTXHi4RXmgdTWMMWPnABqnxroWRbYNv6BsWWz73bvxeV_g56R7_yiZFbdl_WjOLa/exec";
+        try {
+          const cacheKey = new Request(new URL(request.url).origin + '/api/static_giacenze_store');
+          const cache = caches.default;
+          let cachedResponse = await cache.match(cacheKey).catch(() => null);
+          let resultText;
 
-      // 3. Proxy verso Google Apps Script per altre azioni
+          if (cachedResponse) {
+            resultText = await cachedResponse.text();
+            console.log('[Worker] GiacenzeStore loaded from Cache');
+          } else {
+            let csvText = '';
+            try {
+              const gasRes = await fetch(`${GAS_URL}?action=get_history_csv`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 FuelCare-Proxy/Worker' },
+                redirect: 'follow'
+              });
+              if (gasRes.ok) {
+                csvText = await gasRes.text();
+              }
+            } catch (err) {
+              console.warn('[Worker] GAS get_history_csv failed, trying fallback', err);
+            }
+
+            if (!csvText) {
+              const csvUrl = `https://docs.google.com/spreadsheets/d/${GIACENZE_SS_ID}/export?format=csv&sheet=GiacenzeStore`;
+              const csvRes = await fetch(csvUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 FuelCare-Proxy/Worker' },
+                redirect: 'follow'
+              });
+              if (!csvRes.ok) throw new Error(`GS CSV returned status ${csvRes.status}`);
+              csvText = await csvRes.text();
+            }
+
+            // Elabora CSV: prima riga = header, colonna 0 = codice impianto
+            const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+            const hasHeader = lines.length > 0 && (lines[0].toUpperCase().startsWith('PBL') || !/^\d+/.test(lines[0]));
+            const dataLines = hasHeader ? lines.slice(1) : lines;
+            const seen = new Set();
+            const uniqueCodes = [];
+            let totalRows = 0;
+            for (const line of dataLines) {
+              if (!line.trim()) continue;
+              // Estrae il primo campo (colonna 0)
+              const firstComma = line.indexOf(',');
+              const cod = (firstComma === -1 ? line : line.substring(0, firstComma)).replace(/^"|"$/g, '').trim();
+              if (!cod) continue;
+              totalRows++;
+              if (!seen.has(cod)) {
+                seen.add(cod);
+                uniqueCodes.push(cod);
+              }
+            }
+            uniqueCodes.sort((a, b) => {
+              const numA = parseInt(a, 10);
+              const numB = parseInt(b, 10);
+              if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+              return a.localeCompare(b);
+            });
+            const resultObj = { success: true, codici: uniqueCodes, totale: totalRows };
+            resultText = JSON.stringify(resultObj);
+
+            const cacheResponse = new Response(resultText, {
+              headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Cache-Control': 'public, max-age=120'
+              }
+            });
+            if (ctx && ctx.waitUntil) {
+              ctx.waitUntil(cache.put(cacheKey, cacheResponse).catch(() => null));
+            }
+            console.log(`[Worker] GiacenzeStore: ${uniqueCodes.length} codici, ${totalRows} righe totali`);
+          }
+
+          return new Response(resultText, {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ success: false, message: e.message }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+      }
+
+
       const GAS_URL = env.GAS_URL || "https://script.google.com/macros/s/AKfycbwaxTXHi4RXmgdTWMMWPnABqnxroWRbYNv6BsWWz73bvxeV_g56R7_yiZFbdl_WjOLa/exec";
       const targetUrl = query ? `${GAS_URL}${query}` : GAS_URL;
 
